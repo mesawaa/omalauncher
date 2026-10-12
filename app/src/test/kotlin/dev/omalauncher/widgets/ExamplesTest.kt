@@ -52,7 +52,7 @@ class ExamplesTest {
 
     /** The fetch tile shows the phone without Linux; its Arch lines wait for it. */
     @Test fun fetchWorksWithoutLinux() {
-        val p = Compiler.compile(examples.first { it.name == "20-fetch.owl" }.readText())
+        val p = Compiler.compile(examples.first { it.name == "21-fetch.owl" }.readText())
         assertTrue(!p.needsLinux)
         assertTrue(p.commands.first().startsWith(Compiler.IF_LINUX))
     }

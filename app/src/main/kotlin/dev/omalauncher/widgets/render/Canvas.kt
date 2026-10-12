@@ -32,11 +32,14 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import dev.omalauncher.ui.Fonts
 import dev.omalauncher.ui.Palette
 import dev.omalauncher.widgets.lang.Builtins
 import dev.omalauncher.widgets.lang.Env
@@ -53,7 +56,7 @@ import dev.omalauncher.widgets.lang.text
 import dev.omalauncher.widgets.runtime.WidgetInstance
 
 /** Drawing calls per frame; beyond this a Canvas stops and reports. */
-private const val MAX_OPS = 2000
+private const val MAX_OPS = 50_000
 
 /** The most arguments a drawing call takes. */
 private const val MAX_ARGS = 8
@@ -240,14 +243,19 @@ private class Painter(
             }
             "text" -> {
                 val color = Builtins.argb(named["color"] ?: named["fill"] ?: Num(0.0), inst)?.let { androidx.compose.ui.graphics.Color(it) } ?: Palette.foreground
+                // `font:` takes what Text's does; one still loading draws in the launcher's font meanwhile.
+                inst.fontsLoaded.intValue
+                val family = named["font"]?.takeIf { it != Null }?.toString()?.let { Fonts.builtIn(it) ?: inst.font(it) } ?: Palette.current.font
                 val layout =
                     measurer.measure(
                         first.text(),
                         TextStyle(
                             color = color,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = family,
                             fontSize = (named["size"]?.num() ?: 13.0).sp,
-                            fontWeight = if (named["bold"]?.truthy == true) FontWeight.Bold else null,
+                            fontWeight = fontWeight(named["weight"]) ?: if (named["bold"]?.truthy == true) FontWeight.Bold else null,
+                            fontStyle = if (named["italic"]?.truthy == true) FontStyle.Italic else null,
+                            letterSpacing = named["spacing"]?.num()?.sp ?: TextUnit.Unspecified,
                         ),
                     )
                 val w = layout.size.width / density

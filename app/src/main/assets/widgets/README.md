@@ -20,8 +20,11 @@ can't see the phone. Terminal tiles aren't previewed. Errors also go to
 `.errors/<file>.txt`, and the tile shows them.
 
 Widgets sit on a 6-column grid of roughly square cells (a phone has about 12
-rows), bordered like Omarchy windows and colored by the current Omarchy
-theme. Users move and resize them on the phone.
+rows); users move and resize them on the phone. The launcher draws nothing
+around a tile: no frame, no title bar, no focus outline. A widget draws its own
+window, frame or nothing at all, edge to edge with `padding: 0`. Without a
+`background` it sits on a translucent fill of the launcher's background color;
+`background: transparent` shows the wallpaper through.
 
 `examples/` holds more widgets (clocks, system stats, processes, shaders, ...).
 They aren't on the home screen; read them for patterns, or move one up into
@@ -58,14 +61,14 @@ that read it redraw. Properties are separated by newlines or `;`.
 
 | declaration | meaning |
 |---|---|
-| `source x = cmd("...") every 5s` | runs a bash command in this Arch system; `x` is its output (stdout, trimmed). Add `json` to parse JSON output, `timeout 30s` to allow more than 10 s, `status` to get `{out, err, code, ok}` instead (see below), `optional` to let the widget work without Linux (see Without Linux). Default interval: 60 s |
-| `source x = stream("...")` | a long-running command; every line it prints becomes the new value. Add `json` for JSON lines. At most 4 different streams run at once |
-| `source x = http("https://...") every 10m` | an HTTP GET from Android, no curl or shell needed. Takes `json`, `timeout` and `status` like cmd (with `status`, `code` is the HTTP status and `ok` means 2xx), and optionally headers: `http(url, {Accept: "application/json"})`. The response is capped at 1 MB and the interval at 5 s or more. Prefer it over `cmd("curl ...")` |
-| `source x = file("~/.cache/x.json")` | a file in this system, read again whenever it changes (no polling, no shell). Add `json` to parse it. A missing file reads as `""`; at most 1 MB is read. Prefer it over `cmd("cat ...") every 5s` (owl 4) |
+| `source x = cmd("...") every 5s` | runs a bash command in this Arch system; `x` is its output (stdout, trimmed). Add `json` to parse JSON output, `timeout 30s` to allow more than 10 s (up to 1 h), `status` to get `{out, err, code, ok}` instead (see below), `optional` to let the widget work without Linux (see Without Linux). Default interval: 60 s, shortest 0.25 s |
+| `source x = stream("...")` | a long-running command; every line it prints becomes the new value. Add `json` for JSON lines. At most 32 different streams run at once |
+| `source x = http("https://...") every 10m` | an HTTP GET from Android, no curl or shell needed. Takes `json`, `timeout` and `status` like cmd (with `status`, `code` is the HTTP status and `ok` means 2xx), and optionally headers: `http(url, {Accept: "application/json"})`. The response is capped at 16 MB and the interval at 1 s or more. Prefer it over `cmd("curl ...")` |
+| `source x = file("~/.cache/x.json")` | a file in this system, read again whenever it changes (no polling, no shell). Add `json` to parse it. A missing file reads as `""`; at most 16 MB is read. Prefer it over `cmd("cat ...") every 5s` (owl 4) |
 | `source now = clock every 1s` | Unix time in seconds, with no shell involved. Use `fmtTime(now, "HH:mm")` |
 | `source bat = android.battery` | `{level, charging, status, temp, voltage, health, plugged, technology, cycles}` from Android, updated as it changes (`temp` in °C, `voltage` in V; `health`, `plugged`, `technology` and `cycles` are null when the phone doesn't say) |
 | `source dev = android.device` | the phone: `{model, maker, android, sdk, soc}` (the Linux side can't see these) |
-| `source sys = android.system every 5s` | the phone's state, polled: `{kernel, uptime, memory, storage, cpu, display, build, codename, patch, locale, timezone, launcher, theme, apps}`. `uptime` is in seconds; `memory` is `{total, used, available}` and `storage` `{total, used, free}`, in bytes; `cpu` is `{soc, maker, hardware, cores, abi, maxMhz}`; `display` is `{width, height, hz, dpi}`; `patch` is the security patch date, `launcher` this launcher's version, `theme` the Omarchy theme's name and `apps` how many Android apps are installed. See `20-fetch.owl` (owl 5) |
+| `source sys = android.system every 5s` | the phone's state, polled: `{kernel, uptime, memory, storage, cpu, display, build, codename, patch, locale, timezone, launcher, theme, apps}`. `uptime` is in seconds; `memory` is `{total, used, available}` and `storage` `{total, used, free}`, in bytes; `cpu` is `{soc, maker, hardware, cores, abi, maxMhz}`; `display` is `{width, height, hz, dpi}`; `patch` is the security patch date, `launcher` this launcher's version, `theme` its look ("Copland OS") and `apps` how many Android apps are installed. See `examples/21-fetch.owl` (owl 5) |
 | `source m = android.media` | what's playing in any app on the phone: `{available, playing, title, artist, album, app, package, position, duration, art}`, updated as it changes (`position` and `duration` in seconds; `art` goes in `Image { src: m.art }`). `available` is false until the user grants notification access; `media(...)` opens that setting then. See `examples/97-now-playing.owl` |
 | `source n = android.notifications` | the phone's notifications, newest first, updated as they come and go: `{available, count, items}`, each item `{key, app, package, title, text, time, clearable}` (`time` in Unix seconds). Ongoing ones (music, downloads) are left out. Needs the same notification access as media. See `examples/98-notifications.owl` (owl 4) |
 | `source v = android.volume` | the media volume: `{level, muted, steps}` (`level` in percent, `steps` how many the phone has), updated as it changes. Set it with `volume(...)` (owl 4) |
@@ -74,14 +77,14 @@ that read it redraw. Properties are separated by newlines or `;`.
 | `let h = history(x, 60)` | the last 60 values of `x`, sampled whenever a source updates (for Sparkline). With `persist` it survives restarts, unless it's older than it would take to fill |
 | `let p = prev(x)` | the previous value of `x`, for rates: `let rate = (bytes - p) / 5` |
 | `component Name(a, b = 1) { ... }` | a reusable node; use it as `Name { a: 1 }` |
-| `asset logo = base64"iVBOR..."` | an embedded image (under 2 MB) for `Image { src: logo }`, so the widget is one self-contained file |
+| `asset logo = base64"iVBOR..."` | an embedded image (under 32 MB) for `Image { src: logo }`, so the widget is one self-contained file |
 | `requires { pacman: ["jq", "curl"] }` | packages the widget's commands need; see Dependencies |
 | `meta { description: "..."; version: "1.0"; license: "MIT"; category: "news" }` | needed to publish to the widget store (see Sharing) |
-| `meta { owl: 5 }` | the language version the widget needs (this launcher has 5; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5; using them without declaring it is an error |
+| `meta { owl: 6 }` | optional: the language version. The launcher works it out from what the widget uses (this launcher has 6), so there's no need to declare it. A widget that declares a newer one than a launcher has says "update the launcher" there. Notes like (owl 4) below say which version brought a feature |
 | `onTap: ...` | runs when the tile (not a button inside it) is tapped |
 | `screen { ... }` | a full-screen view of the widget, opened with `screen()`; see Screens (owl 5) |
 | `every 10s { ... }`, `at t { ... }`, `when c { ... }`, `on x { ... }` | statements that run without a tap; see Triggers |
-| `padding: 12` / `background: ...` | the tile's padding (dp) and background |
+| `padding: 12` / `background: ...` | the tile's padding (dp) and background: a color, `transparent` (the wallpaper shows through), or a gradient, `linear(...)` or `radial(...)` |
 
 Sources only run while their page (or a neighbour) is on screen, and
 identical commands in several widgets run once. A few commands run at the same
@@ -106,7 +109,7 @@ Statements that run on their own, written like handlers, at the top of the widge
 
 | trigger | runs |
 |---|---|
-| `every 10s { ... }` | every 10 seconds while the page is live (on screen or next to it), like a source. At least 1 s |
+| `every 10s { ... }` | every 10 seconds while the page is live (on screen or next to it), like a source. At least 0.05 s; for smooth motion, read `time` in a Canvas instead |
 | `at endsAt { ... }` | when the clock reaches `endsAt`, a Unix time in seconds, even while the page is off screen. Again for each new time; 0 or null means none. A time that passed while the launcher wasn't running runs at the next start, so set it to 0 in the statements. While the phone sleeps it can run a little late, when it wakes |
 | `when cond { ... }` | each time `cond` turns true, including when it's already true as the widget starts |
 | `on x { ... }` | each time `x` changes, with `value` (the new one) and `old`. Not for its first value, and null (loading) doesn't count as a change |
@@ -127,7 +130,7 @@ widget "focus" {
 ```
 
 `when` and `on` react to what they read: a source only updates while its page is live, so
-for a deadline use `at`, which doesn't need one. A trigger that runs more than 10 times a
+for a deadline use `at`, which doesn't need one. A trigger that runs more than 120 times a
 second is held back and reported (one that changes what it watches would otherwise loop).
 
 ## Expressions
@@ -151,10 +154,10 @@ second is held back and reported (one that changes what it watches would otherwi
 | weather | `weatherIcon(code, night)`: omarchy's weather glyph for a wttr.in `weatherCode` (show it with `font: icon`) |
 | parsing | `match(s, regex)` (groups of the first match), `matchAll(s, regex)`, `parseJson(s)` |
 | lists | `range(n)` or `range(a, b, step)`, `map filter find any all count sum avg sort sortBy reverse take drop first last indexOf unique flatten`, `keys values entries get(obj, key, default)` |
-| colors | theme names `accent foreground background muted surface border red green yellow blue magenta cyan orange` plus `bright_*`, `color0`…`color15`; `#7aa2f7`; `rgb(r, g, b, a)`, `hsl(h, s, l, a)`, `alpha(c, 0.5)`, `mix(a, b, t)` |
-| gradients | `linear(x0, y0, x1, y1, [colors])`, `radial(cx, cy, r, [colors])`: fills in Canvas |
+| colors | the launcher's colors by name, `accent foreground background muted surface border selection red green yellow blue magenta cyan orange` plus `bright_*`, `color0`…`color15` and `transparent` (see Colors and fonts); `#7aa2f7` or `#aarrggbb`; `rgb(r, g, b, a)`, `hsl(h, s, l, a)`, `alpha(c, 0.5)`, `mix(a, b, t)` |
+| gradients | `linear(x0, y0, x1, y1, [colors])`, `radial(cx, cy, r, [colors])`, in dp from the top left: fills in Canvas, a node's or the tile's `background`, and a Text's `color` |
 
-Prefer theme color names: widgets then follow theme changes.
+Named colors follow the launcher's palette, which style.toml can change; hex colors stay as written.
 
 Persisted values are kept by the launcher (not in the widget file), per file name, and
 must be plain data: numbers, text, lists and maps (not colors). Store times as absolute
@@ -175,12 +178,12 @@ when lists reorder), and `let x = ...` inside any node.
 | node | properties |
 |---|---|
 | `Column` | `gap` (dp, default 4), `align: start/center/end`, `justify: start/center/end/spaceBetween/spaceAround/spaceEvenly`, `scroll: true` |
-| `Row` | `gap` (8), `align: top/center/bottom`, `justify`, `wrap: true` |
+| `Row` | `gap` (8), `align: top/center/bottom`, `justify`, `wrap: true`, `scroll: true` (sideways) |
 | `Flow` | a Row that wraps to new lines |
 | `Box` | stacks children on top of each other; `align: center/top/bottom/start/end/topStart/topEnd/bottomStart/bottomEnd` |
 | `Grid` | `columns` (2), `gap`; children fill cells left to right |
-| `Text` | `text`, `style: huge/title/body/small/muted/label`, `color`, `fontSize`, `bold`, `italic`, `font: mono/sans/serif/icon` (`icon` draws the Nerd Font weather glyphs U+E300–E3E3, plus 󰄬 U+F012C and 󰅖 U+F0156), `align: start/center/end`, `maxLines` |
-| `Button` | `text`, `color`, `onTap` |
+| `Text` | `text`, `style: huge/title/body/small/muted/label`, `color` (or a gradient), `align: start/center/end`, `maxLines`, `overflow: ellipsis/clip/visible`, `shadow` (a color for a glow, or `{color, x, y, blur}` in dp), and the type properties below |
+| `Button` | `text`, `color` (text and outline), `onTap`, and the type properties below. A `border` or `padding` of its own replaces the button's outline or padding |
 | `Progress` | `value`, `max` (100), `color`, `track` |
 | `Ring` | circular progress: `value`, `max` (1), `color`, `track`, `thickness` (6), `start`/`sweep` (degrees; `start: 225; sweep: 270` makes a gauge). 64 dp unless sized |
 | `Sparkline` | `values` (a list, usually a `history`), `min` (0), `max`, `color`, `area: true` or a color, `thickness` |
@@ -189,25 +192,55 @@ when lists reorder), and `let x = ...` inside any node.
 | `Shader` | an AGSL shader, below. Fills the space unless sized |
 | `Spacer` | empty space: `size`, `width`, `height` or `weight` |
 | `Slider` | a horizontal slider: `value`, `min` (0), `max` (100), `step`, `color`, `track`, `live`. `onChange` gets the chosen `value` when the finger lifts, or at every step while dragging with `live: true`. Full width and 28 dp tall unless sized (owl 4) |
-| `Input` | a one-line text field: `text` (what it shows; replaces what's typed when it changes), `placeholder`, `color`, `fontSize`, `clear: true` (empty it after submitting). `onChange` gets the text as `value` as it's typed, `onSubmit` when the keyboard's send key is pressed (owl 4) |
+| `Input` | a one-line text field: `text` (what it shows; replaces what's typed when it changes), `placeholder`, `color`, the type properties below, `clear: true` (empty it after submitting). `onChange` gets the text as `value` as it's typed, `onSubmit` when the keyboard's send key is pressed (owl 4) |
 | `Terminal` | a live terminal (foot) in the tile: `command` (default: the login shell), `fontSize` (points; foot.ini has 8). Fills the space unless sized. See below |
+
+The type properties of `Text`, `Button` and `Input`:
+
+- `font`: any font (see Colors and fonts); without one, the launcher's font
+- `fontSize` (sp), `bold: true` or `fontWeight` (100–900, or `thin light normal medium semibold bold black`), `italic: true`
+- `letterSpacing` and `lineHeight` (sp; spacing can be negative), `underline: true`, `strike: true`
+- `fontFeatures`: OpenType features, `"tnum"` for figures of one width, `"smcp, ss01"` and so on
 
 Every node also takes:
 
 - `width height size` (dp), `fill: true/width/height`, `weight` (share of the
   space left in a Row or Column), `padding` (`8`, `[h, v]` or `[l, t, r, b]`)
-- `background`, `border` (dp), `borderColor`, `radius`, `clip: true`
-  (without `radius`, bordered elements follow the launcher's corner style: 0 for edge, 4 for soft, 8 for round)
-- `opacity`, `rotation` (degrees), `scale`, `offset: [x, y]` (dp), `visible`
-- handlers: `onTap` (with `x`, `y`) and `onDrag` (with `dx`, `dy`, `x`, `y`); `Slider` and `Input` also take
-  `onChange`, and `Input` `onSubmit`, both with `value`. Long-press
+- `background` (a color or a gradient), `border` (dp), `borderColor`, `radius` (one, or `[topLeft, topRight,
+  bottomRight, bottomLeft]`), `clip: true` (without `radius`, bordered elements follow the launcher's corner
+  style: 0 for edge, 4 for soft, 8 for round)
+- `glow`: a soft light around the node's shape, past its edges, a color or `{color, blur, x, y}` (dp; blur
+  12 by default); with an offset it's a drop shadow
+- `opacity`, `rotation` (degrees), `scale`, `scaleX`, `scaleY`, `origin: [x, y]` (what rotation and scale
+  pivot on, as fractions of the size; `[0.5, 0.5]` by default), `blur` (dp; Android 12 and newer),
+  `offset: [x, y]` (dp), `visible`
+- handlers: `onTap` and `onDoubleTap` (with `x`, `y`) and `onDrag` (with `dx`, `dy`, `x`, `y`); `Slider` and
+  `Input` also take `onChange`, and `Input` `onSubmit`, both with `value`. Long-press
   belongs to the home screen, which uses it to move and resize tiles
 - `animate prop: spring()` or `tween(300ms, "linear"/"in"/"out"/"ease")`, for `value`,
-  `opacity`, `rotation`, `scale`, `color` or `background`. For springs:
+  `opacity`, `rotation`, `scale`, `scaleX`, `scaleY`, `blur`, `color` or `background`. For springs:
   `spring(damping, stiffness)`
 
-`opacity`, `rotation`, `scale`, `offset`, colors and the contents of Canvas and
+`opacity`, `rotation`, `scale`, `blur`, `offset`, `glow`, colors and the contents of Canvas and
 Shader apply at draw time. Changing them, even every frame, costs no layout.
+
+```owl
+widget "navi window" {
+  padding: 0
+  background: "#050517"
+  Column { fill: true; gap: 0; border: 1; borderColor: focused ? accent : border; radius: 0
+    Row { fill: width; height: 22; padding: [8, 0, 4, 0]; background: selection
+      Text { text: "NAVI :: STATUS"; font: mono; fontSize: 11; letterSpacing: 1; weight: 1; maxLines: 1 }
+      Box { width: 14; height: 14; align: center; border: 1; borderColor: border; radius: 0
+        Text { text: "×"; fontSize: 11; align: center }
+      }
+    }
+    Box { fill: true; align: center
+      Text { text: "present day"; font: serif; italic: true; fontSize: 22; align: center; shadow: accent; color: linear(0, 0, 160, 0, [accent, blue]) }
+    }
+  }
+}
+```
 
 Handlers assign state and run actions, separated by `;` or newlines. An action whose first
 value hasn't loaded yet (`…`) does nothing. After an action,
@@ -218,13 +251,13 @@ the widget that ran it refreshes its sources; other widgets keep their own inter
 |---|---|
 | `terminal("btop")` | opens the command in a terminal window; `terminal(cmd, "title")` |
 | `app("gtk3-demo")` | starts a graphical Linux app |
-| `run("cmd")` | runs in the background (on its own shell, never retried), then refreshes this widget |
+| `run("cmd")` | runs in the background (in one of four action shells, up to 10 minutes, never retried), then refreshes this widget |
 | `x = run("cmd")` | the same, and puts the command's output into the state `x` when it finishes |
 | `androidApp("org.pkg")` | opens an Android app by package name |
 | `copy(text)` | copies text to the Android clipboard |
 | `notify("title", "text")` | posts an Android notification (if the launcher may post them) |
-| `url("https://...")` | opens in the Android browser |
-| `launcher("style")` | opens a launcher screen: `style` (theme, background, home screen, terminal; `themes` too), `agents`, `store`, `drawer` or `linux` (the sheet that installs Linux) |
+| `url("https://...")`, `url(uri, "com.app")` | opens a link in whatever app takes it (browser, maps, mail, ...), or in that app: a deep link. An `intent:` URI (`intent:#Intent;action=...;package=...;S.key=value;end`) is a whole Android intent. It can't start the launcher itself (that's `launcher(...)`) or grant apps access to files |
+| `launcher("style")` | opens a launcher screen: `style` (colors and font, home screen, terminal), `agents`, `store`, `drawer` or `linux` (the sheet that installs Linux) |
 | `refresh()` | re-runs this widget's sources now |
 | `screen()` / `close()` | opens the widget's `screen { }` full screen, or closes it (owl 5) |
 | `media("toggle")` | controls what's playing: `toggle`, `play`, `pause`, `next`, `previous`, or `open` (brings up the player app) |
@@ -258,20 +291,21 @@ widget "weather" {
 }
 ```
 
-- It opens in the launcher's window frame, titled with `title` (default: the widget's name),
-  with a ✕. Back, Home and the ✕ close it; so does `close()`.
+- It opens in a Navi window: a title bar with `title` (default: the widget's name) and a close box. Back,
+  Home and the box close it; so does `close()`. With `chrome: false` there's no window: the widget's nodes
+  fill the screen on the background color, and Back, Home or a `close()` of the widget's own closes it.
 - It's the same widget: it reads the same sources, state, lets and components as the tile,
   and a tap that changes state there changes the tile too. While it's open its sources keep
   running, whichever page the tile is on.
 - It holds the same nodes as a tile. It doesn't scroll by itself: put the content in a
   `Column { scroll: true }`. `screenWidth` and `screenHeight` are its size in dp, known from its
   first frame. The tile can read them too, but there they may be `null`: use `screenWidth ?? 0`.
-- One screen per widget, with up to 1000 nodes (the tile still has its own 500). For views
+- One screen per widget, with up to 20,000 nodes (the tile has its own 10,000). For views
   within it, use a state and `if`: `state tab = "hours"`, buttons that set it, and
   `if tab == "hours" { ... } else { ... }`.
 
-Screens are for showing more, not for building apps: there's no navigation between screens, no
-lists that load as they scroll, and only the nodes above (no maps, web pages or video).
+A screen holds whatever the nodes can draw: a dashboard, a reader, a game on a Canvas. For a web page,
+a map or a video, open it with `url(...)`.
 
 ## Components
 
@@ -366,7 +400,9 @@ widget "shell" {
 - The terminal keeps running while its page is off screen. It ends when the widget
   is removed or its file changes. When `command` exits, the tile offers a restart;
   use `"btop; exec bash"` to fall back to a shell.
-- `padding: 0` lets the terminal fill the tile's frame.
+- `padding: 0` lets the terminal fill the tile.
+- `focused` is true while the tile's terminal has the keyboard. The launcher draws no outline for it, so a
+  widget marks it itself: `borderColor: focused ? accent : border`.
 
 ## From scripts
 
@@ -473,12 +509,45 @@ flags risky ones before it adds it as `shared-<name>.owl`: nobody reviewed it. O
 app's **Share…** shows the code, and `omarchy-widgets share` / `omarchy-widgets import` make and read
 links.
 
+## Colors and fonts
+
+The launcher looks like Copland OS Enterprise, the OS on Lain's Navi: deep navy, teal window frames, pale
+cyan text. Its colors are the names widgets use: `background` #050517, `surface` #070b26 (panels),
+`selection` #0d1f50 (a window's title bar), `border` #246a96 (window frames), `foreground` #a8e4ea,
+`muted` #5a7fae (secondary text), `accent` #3fb8e0, `bright_foreground` #e0fbff, `red` #d2738a and
+`yellow` #c1b492 (fauux's pink and beige), and `green`, `cyan`, `blue`, `magenta`, `orange`,
+`color0`…`color15`.
+
+`~/.config/omalauncher/style.toml` changes any of them, and the launcher's own font:
+
+```toml
+font = "mono"
+accent = "#3fb8e0"
+```
+
+Saving it restyles the launcher, every widget that uses those names and the terminals at once. Delete a
+line to get Copland's value back. A widget's hex colors stay as written.
+
+`font:` (on Text, Button, Input, and Canvas `text()`) takes
+- `mono`, `sans`, `serif`, `cursive`, `system`, or `icon`: the bundled Nerd glyphs, the weather icons
+  U+E300–E3E3 plus 󰄬 U+F012C and 󰅖 U+F0156;
+- in quotes, an Android font by name: `"sans-serif-condensed"`, `"serif-monospace"`, `"casual"`;
+- in quotes, a font file's name without the extension, looked for in ~/.local/share/fonts, ~/.fonts and
+  /usr/share/fonts, then among the phone's fonts: `"JetBrainsMono-Regular"`. Case, spaces and dashes
+  don't matter, and a family name finds its regular cut: `"jetbrains mono"`;
+- in quotes, a font file's path: `"~/fonts/Mine.otf"`.
+
+Install fonts with pacman (`ttf-jetbrains-mono`; `ttf-nerd-fonts-symbols` has every Nerd glyph) or put
+.ttf and .otf files in ~/.local/share/fonts. A font that isn't found is reported in `.errors/` (and by
+owl-check), and the text uses the launcher's font meanwhile. Text without `font` uses the launcher's font,
+style.toml's `font`.
+
 ## Limits
 
-A widget has at most 500 nodes, 2000 drawing calls per frame, lists of 1000
-items, and a step budget per update. A widget that draws slowly animates at
-half rate. Errors never take the home screen down: the failing value shows `…`
-and the message goes to `.errors/`.
+They're generous, there only so one runaway widget can't freeze the home screen: 10,000 nodes in a
+tile and 20,000 in a screen, 50,000 drawing calls per frame, lists of 20,000 items, and 5 million steps
+per update. A widget that takes over 12 ms a frame to draw animates at half rate. Errors never take the
+home screen down: the failing value shows `…` and the message goes to `.errors/`.
 
 ## Tips
 
@@ -489,8 +558,8 @@ and the message goes to `.errors/`.
 - Use `weight: 1` to fill leftover space and `fill: width` to stretch across.
 - A `Text` without `width`, `weight` or `fill` takes the full width. In a `Row`, give the Texts
   next to a `weight: 1` one a `width`, or the weighted one is squeezed to nothing.
-- Look at the example widgets in this folder for patterns: `90-analog-clock` (Canvas),
+- Look at the example widgets for patterns: `90-analog-clock` (Canvas),
   `91-focus` (state, buttons and `at`), `92-aurora` (Shader), `93-latency` (stream),
   `88-notes` (Input), `98-notifications` (android.notifications), `99-volume` (Slider),
-  and next to it `10-today` (a weather screen behind the tile), `20-fetch` (fastfetch as a dashboard), `45-terminal` (a live terminal) and
-  `60-owl` (sprites).
+  `12-today` (a weather screen behind the tile), `21-fetch` (fastfetch as a dashboard), `61-owl` (sprites),
+  and `45-terminal` next to this file (a live terminal).

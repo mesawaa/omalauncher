@@ -577,7 +577,7 @@ class WidgetEngine(
                     error == null -> target.delete()
                     append -> {
                         errorDir.mkdirs()
-                        if (target.length() < 64 shl 10) target.appendText("runtime: $error\n")
+                        if (target.length() < 1 shl 20) target.appendText("runtime: $error\n")
                     }
                     else -> {
                         errorDir.mkdirs()
@@ -703,11 +703,14 @@ class WidgetEngine(
         const val GUEST_DIR = ".config/omalauncher/widgets"
 
         private const val AGENT_POINTER =
-            "# omalauncher\n\nThis Arch system runs inside an Android launcher. Home-screen widgets are `.owl` files in " +
-                "~/$GUEST_DIR, written in a small declarative language documented in README.md there. " +
-                "Saved files show up on the phone within seconds. After saving, run `owl-check <file>`: it prints the errors " +
-                "and the path of a PNG of the tile, drawn with live data; look at it to check the layout. " +
+            "# Copland OS\n\nThis Arch system runs inside an Android launcher, Copland OS (a fork of omalauncher). " +
+                "Home-screen widgets are `.owl` files in ~/$GUEST_DIR, written in a small declarative language documented in " +
+                "README.md there. Saved files show up on the phone within seconds. After saving, run `owl-check <file>`: it prints " +
+                "the errors and the path of a PNG of the tile, drawn with live data; look at it to check the layout. " +
                 "examples/ holds more widgets to learn from or move up to use. Scripts, cron jobs and hooks can set a running " +
-                "widget's state or refresh it with `owl-send <file> set <state> <value>` and `owl-send <file> refresh`.\n"
+                "widget's state or refresh it with `owl-send <file> set <state> <value>` and `owl-send <file> refresh`.\n\n" +
+                "The launcher draws no frame around a widget: each draws its own look, in any font (installed with pacman or " +
+                "put in ~/.local/share/fonts). The launcher's own colors and font are in ~/.config/omalauncher/style.toml; " +
+                "saving it restyles the launcher, the widgets that use color names, and terminals at once.\n"
     }
 }

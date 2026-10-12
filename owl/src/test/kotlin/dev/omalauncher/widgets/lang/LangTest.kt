@@ -190,7 +190,7 @@ class LangTest {
         val p = Compiler.compile("widget {\nsource w = http(\"https://x.test/a\", {Accept: \"application/json\"}) every 1s json status\nText { text: w.code }\n}")
         val s = p.globals[0] as Global.Source
         assertEquals("http", s.kind)
-        assertEquals(5.0, s.every, 0.0)
+        assertEquals(1.0, s.every, 0.0)
         assertTrue(s.headers != null && s.status)
         assertEquals(listOf("http GET https://x.test/a"), p.commands)
         assertTrue(compileError("widget {\nsource w = http(\"file:///etc/passwd\")\nText { text: w }\n}").contains("http:// or https://"))
@@ -270,11 +270,34 @@ class LangTest {
         Compiler.compile("widget {\nmeta { owl: 3 }\nCanvas { sprite([\"ab\"], 0, 0, 4, palette: {a: red}) }\n}")
     }
 
-    @Test fun newerFeaturesNeedTheirVersionDeclared() {
-        assertTrue(compileError("widget {\nCanvas { sprite([\"ab\"], 0, 0, 4) }\n}").contains("sprite needs owl 3: add meta { owl: 3 }"))
-        assertTrue(compileError("widget {\nmeta { owl: 2 }\nCanvas { sprite([\"ab\"], 0, 0, 4) }\n}").contains("needs owl 3"))
-        assertTrue(compileError("widget {\nTerminal { }\n}").contains("Terminal needs owl 2"))
+    /** Nothing has to be declared: what a widget uses sets its level, which the store and older launchers go by. */
+    @Test fun featuresSetTheLevelWithoutDeclaringIt() {
+        assertEquals(3, Compiler.compile("widget {\nCanvas { sprite([\"ab\"], 0, 0, 4) }\n}").level)
+        assertEquals(3, Compiler.compile("widget {\nmeta { owl: 2 }\nCanvas { sprite([\"ab\"], 0, 0, 4) }\n}").level)
+        assertEquals(2, Compiler.compile("widget {\nTerminal { }\n}").level)
         assertEquals(3, Compiler.compile("widget {\nmeta { owl: 3 }\nTerminal { }\n}").level)
+        assertEquals(1, Compiler.compile("widget {\nText { text: 1; font: mono; fontSize: 20 }\n}").level)
+        assertTrue(compileError("widget {\nmeta { owl: 99 }\nText { text: 1 }\n}").contains("update the launcher"))
+    }
+
+    @Test fun typeAndEffects() {
+        val p =
+            Compiler.compile(
+                "widget {\n state n = 0\n" +
+                    " Row { scroll: true; glow: {color: accent, blur: 10}; blur: 2; scaleX: 1.5; origin: [0, 1]; radius: [4, 4, 0, 0]\n" +
+                    "  Text { text: \"Navi\"; font: \"ndot57\"; fontWeight: semibold; letterSpacing: 2; lineHeight: 18; underline: true; " +
+                    "strike: false; fontFeatures: \"tnum\"; overflow: clip; shadow: {color: accent, blur: 6}; color: linear(0, 0, 40, 0, [accent, blue]) }\n" +
+                    "  Button { text: focused ? \"on\" : \"off\"; font: serif; italic: true; onDoubleTap: n = n + 1; onTap: url(\"intent:#Intent;end\", \"com.x\") }\n" +
+                    "  Input { font: \"~/f.ttf\"; fontWeight: 700 }\n" +
+                    " }\n Canvas { text(\"x\", 0, 0, font: serif, italic: true, weight: 300, spacing: 1) }\n" +
+                    " screen { chrome: false; Text { text: 1 } }\n}",
+            )
+        assertEquals(6, p.level)
+        assertEquals(Bool(false), p.screenChrome!!.const)
+        val row = p.root[0] as WNode.Element
+        assertEquals(Str("semibold"), (row.children[0] as WNode.Element).props["fontWeight"]!!.const)
+        assertTrue(compileError("widget { Text { text: 1; fontWeight: heavy } }").contains("unknown name"))
+        assertTrue(compileError("widget { Text { text: 1 }\n screen { chrome: false; padding: 2; Text { text: 1 } } }").contains("only takes title and chrome"))
     }
 
     @Test fun sourcesAndMeta() {
@@ -334,8 +357,8 @@ class LangTest {
         assertEquals(true, needs("requires { pacman: [\"jq\"] }\nText { text: \"x\" }"))
         val dir = java.io.File("../app/src/main/assets/widgets")
         fun bundled(name: String) = Compiler.compile(java.io.File(dir, name).readText()).needsLinux
-        assertEquals(false, bundled("10-today.owl"))
-        assertEquals(false, bundled("20-fetch.owl"))
+        assertEquals(false, bundled("examples/12-today.owl"))
+        assertEquals(false, bundled("examples/21-fetch.owl"))
         assertEquals(true, bundled("45-terminal.owl"))
     }
 
@@ -480,8 +503,9 @@ class LangTest {
     }
 
     @Test fun triggerErrors() {
-        assertTrue(compileError("widget {\n state n = 0\n every 1s { n = 1 }\n Text { text: n } }").contains("every needs owl 4"))
-        assertTrue(compileError("widget {\n meta { owl: 4 }\n state n = 0\n every 0.5s { n = 1 }\n Text { text: n } }").contains("at most once a second"))
+        assertEquals(4, Compiler.compile("widget {\n state n = 0\n every 1s { n = 1 }\n Text { text: n } }").level)
+        Compiler.compile("widget {\n state n = 0\n every 0.1s { n = 1 }\n Text { text: n } }")
+        assertTrue(compileError("widget {\n meta { owl: 4 }\n state n = 0\n every 0.01s { n = 1 }\n Text { text: n } }").contains("at most 20 times a second"))
         assertTrue(compileError("widget {\n meta { owl: 4 }\n when true { refresh() }\n Text { text: 1 } }").contains("needs a value that changes"))
         assertTrue(compileError("widget {\n meta { owl: 4 }\n state n = 0\n Column { when n { n = 1 } } }").contains("only allowed at the top"))
         assertTrue(compileError("widget {\n meta { owl: 4 }\n state n = 0\n when n n = 1\n Text { text: n } }").contains("expected '{'"))
@@ -498,7 +522,7 @@ class LangTest {
         assertEquals(listOf("read file ~/.cache/x.json"), p.commands)
         assertTrue(compileError("widget {\n meta { owl: 4 }\n source c = file(\"x\")\n Text { text: c } }").contains("starting with / or ~/"))
         assertTrue(compileError("widget {\n meta { owl: 4 }\n source c = file(\"/x\") every 5s\n Text { text: c } }").contains("takes no every"))
-        assertTrue(compileError("widget {\n source c = file(\"/x\")\n Text { text: c } }").contains("file needs owl 4"))
+        assertEquals(4, Compiler.compile("widget {\n source c = file(\"/x\")\n Text { text: c } }").level)
     }
 
     @Test fun androidNotificationsAndVolume() {
@@ -508,7 +532,7 @@ class LangTest {
         assertTrue(!p.needsLinux)
         assertTrue(compileError("widget {\n meta { owl: 4 }\n Text { text: 1; onTap: volume(\"loud\") } }").contains("volume takes"))
         assertTrue(compileError("widget {\n meta { owl: 4 }\n Text { text: 1; onTap: notification(\"read\", \"k\") } }").contains("notification takes"))
-        assertTrue(compileError("widget {\n Text { text: 1; onTap: volume(50) } }").contains("volume needs owl 4"))
+        assertEquals(4, Compiler.compile("widget {\n Text { text: 1; onTap: volume(50) } }").level)
     }
 
     @Test fun sliderAndInput() {
@@ -526,7 +550,7 @@ class LangTest {
         input.handlers["onSubmit"]!!.run(Env.root(host), listOf(Str("hi")))
         assertEquals(Str("hi"), host.slots[1])
         assertTrue(compileError("widget {\n meta { owl: 4 }\n state v = 1\n Text { text: v; onChange: v = value } }").contains("onChange only works on Slider and Input"))
-        assertTrue(compileError("widget {\n Slider { value: 1 } }").contains("Slider needs owl 4"))
+        assertEquals(4, Compiler.compile("widget {\n Slider { value: 1 } }").level)
     }
 
     @Test fun screens() {
@@ -539,15 +563,15 @@ class LangTest {
         assertEquals(1, p.screen!!.size)
         assertEquals(Str("more"), p.screenTitle!!.const)
         assertEquals(1, p.nodeCount)
-        assertTrue(compileError("widget {\n Text { text: 1 }\n screen { Text { text: 2 } } }").contains("screen needs owl 5"))
+        assertEquals(5, Compiler.compile("widget {\n Text { text: 1 }\n screen { Text { text: 2 } } }").level)
         assertTrue(compileError("widget {\n meta { owl: 5 }\n onTap: screen()\n Text { text: 1 } }").contains("need a screen { } block"))
         assertTrue(compileError("widget {\n meta { owl: 5 }\n Text { text: 1 }\n screen { Text { text: 2 } }\n screen { Text { text: 3 } } }").contains("one screen"))
         assertTrue(compileError("widget {\n meta { owl: 5 }\n Column { screen { Text { text: 2 } } } }").contains("top of the widget"))
         assertTrue(compileError("widget {\n meta { owl: 5 }\n Text { text: 1 }\n screen { padding: 4; Text { text: 2 } } }").contains("only takes title"))
-        // The screen has its own node budget: 600 nodes fit there but not in a tile.
-        val many = "Column { for i in range(1) { " + "Spacer { }".repeat(600) + " } }"
+        // The screen has its own, larger node budget: what fits there may not fit in a tile.
+        val many = "Column { for i in range(1) { " + "Spacer { }".repeat(Compiler.MAX_NODES + 100) + " } }"
         Compiler.compile("widget {\n meta { owl: 5 }\n Text { text: 1 }\n screen { $many } }")
-        assertTrue(compileError("widget {\n meta { owl: 5 }\n $many }").contains("more than 500 nodes"))
+        assertTrue(compileError("widget {\n meta { owl: 5 }\n $many }").contains("more than ${Compiler.MAX_NODES} nodes"))
     }
 
     @Test fun optionalSources() {
@@ -557,9 +581,9 @@ class LangTest {
         assertEquals(listOf(Compiler.IF_LINUX + "uname", "btop"), p.commands)
         // run(...) still needs Linux: it would fail unseen without it.
         assertTrue(Compiler.compile("widget {\n Text { text: 1; onTap: run(\"x\") } }").needsLinux)
-        assertTrue(compileError("widget {\n source x = cmd(\"uname\") optional\n Text { text: x } }").contains("optional needs owl 5"))
+        assertEquals(5, Compiler.compile("widget {\n source x = cmd(\"uname\") optional\n Text { text: x } }").level)
         assertTrue(compileError("widget {\n meta { owl: 5 }\n source x = http(\"https://a.b\") optional\n Text { text: x } }").contains("optional only works"))
-        assertTrue(compileError("widget {\n Text { text: linux } }").contains("linux needs owl 5"))
+        assertEquals(5, Compiler.compile("widget {\n Text { text: linux } }").level)
     }
 
     @Test fun hostileInputFailsAsCompileErrors() {
@@ -568,7 +592,7 @@ class LangTest {
         assertTrue(compileError("widget { Text { text: 1\u0663 } }").contains("unexpected character"))
         assertTrue(compileError("widget { Text { text: ${"(".repeat(50_000)}1${")".repeat(50_000)} } }").contains("too deeply nested"))
         assertTrue(compileError("widget { Text { text: ${List(100_000) { "1" }.joinToString("+")} } }").contains("too deeply nested"))
-        assertTrue(compileError("widget {\n meta { owl: 4 }\n state n = 0\n every sqrt(-1) { n = 1 }\n Text { text: n } }").contains("at most once a second"))
+        assertTrue(compileError("widget {\n meta { owl: 4 }\n state n = 0\n every sqrt(-1) { n = 1 }\n Text { text: n } }").contains("at most 20 times a second"))
         val clock = Compiler.compile("widget {\n source c = clock every sqrt(-1)\n Text { text: c } }").globals[0] as Global.Source
         assertEquals(1.0, clock.every, 0.0)
     }
@@ -580,7 +604,7 @@ class LangTest {
     }
 
     @Test fun padWidthIsCapped() {
-        assertEquals(Builtins.MAX_LIST, text("pad(\"x\", w)", "state w = 2000000000").length)
+        assertEquals(Builtins.MAX_PAD, text("pad(\"x\", w)", "state w = 2000000000").length)
     }
 
     @Test fun jsonNestingIsLimited() {

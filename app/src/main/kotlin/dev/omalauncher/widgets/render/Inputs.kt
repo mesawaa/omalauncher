@@ -148,7 +148,7 @@ internal fun InputNode(
     val placeholder = p.observe("placeholder")?.toString().orEmpty()
     val clear = p.observe("clear")?.truthy == true
     val color = p.color("color") { Palette.foreground }
-    val style = WidgetMono.copy(fontSize = p.observe("fontSize")?.num()?.sp ?: WidgetMono.fontSize)
+    val style = typeStyle(p, WidgetMono.fontSize)
     val onChange = p.el.handlers["onChange"]
     val onSubmit = p.el.handlers["onSubmit"]
     val focus = LocalFocusManager.current

@@ -11,19 +11,20 @@ class Compiler private constructor(
     private val ast: WidgetAst,
 ) {
     companion object {
-        const val MAX_NODES = 500
+        /** Generous: a guard against a runaway generated tree, not a size budget. */
+        const val MAX_NODES = 10_000
 
         /** A screen has more room than a tile, so it gets its own, larger limit. */
-        const val MAX_SCREEN_NODES = 1000
+        const val MAX_SCREEN_NODES = 20_000
 
         /**
-         * The language version this compiler implements. Widgets that need a
-         * newer one declare it, `meta { owl: 2 }`, and older launchers say so
-         * instead of failing on what they don't know. Bump it with every
-         * addition a widget could depend on: nodes, properties, builtins.
+         * The language version this compiler implements. A widget's level is the newest
+         * feature it uses ([SINCE]); declaring it, `meta { owl: 2 }`, is optional. A widget
+         * that declares a newer one than this launcher has gets "update the launcher".
+         * Bump it with every addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 5
-        private const val MAX_ASSET_BYTES = 2 shl 20
+        const val LEVEL = 6
+        private const val MAX_ASSET_BYTES = 32 shl 20
 
         fun compile(src: String): Program =
             try {
@@ -33,17 +34,20 @@ class Compiler private constructor(
                 throw CompileError("too deeply nested", 0)
             }
 
+        /** Type properties of Text, Button and Input: a font (by name, Android's or a file), its size and its cut. */
+        val TEXT_STYLE = setOf("font", "fontSize", "bold", "italic", "fontWeight", "letterSpacing", "lineHeight", "underline", "strike", "fontFeatures")
+
         /** Nodes: their own properties, and what they may contain. */
         val KINDS: Map<String, Kind> =
             mapOf(
                 "Column" to Kind(setOf("gap", "align", "justify", "scroll"), Children.UI),
-                "Row" to Kind(setOf("gap", "align", "justify", "wrap"), Children.UI),
+                "Row" to Kind(setOf("gap", "align", "justify", "wrap", "scroll"), Children.UI),
                 "Flow" to Kind(setOf("gap", "align", "justify"), Children.UI),
                 "Box" to Kind(setOf("align"), Children.UI),
                 "Grid" to Kind(setOf("columns", "gap"), Children.UI),
-                "Text" to Kind(setOf("text", "style", "color", "fontSize", "bold", "italic", "font", "align", "maxLines"), Children.NONE),
+                "Text" to Kind(setOf("text", "style", "color", "align", "maxLines", "overflow", "shadow") + TEXT_STYLE, Children.NONE),
                 "Image" to Kind(setOf("src", "fit", "tint"), Children.NONE),
-                "Button" to Kind(setOf("text", "color"), Children.NONE),
+                "Button" to Kind(setOf("text", "color") + TEXT_STYLE, Children.NONE),
                 "Progress" to Kind(setOf("value", "max", "color", "track"), Children.NONE),
                 "Ring" to Kind(setOf("value", "max", "color", "track", "thickness", "start", "sweep"), Children.NONE),
                 "Sparkline" to Kind(setOf("values", "min", "max", "color", "area", "thickness"), Children.NONE),
@@ -54,16 +58,18 @@ class Compiler private constructor(
                 "Terminal" to Kind(setOf("command", "fontSize"), Children.NONE),
                 // owl 4: input.
                 "Slider" to Kind(setOf("value", "min", "max", "step", "color", "track", "live"), Children.NONE),
-                "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear"), Children.NONE),
+                "Input" to Kind(setOf("text", "placeholder", "color", "clear") + TEXT_STYLE, Children.NONE),
             )
 
         val COMMON =
             setOf(
                 "width", "height", "size", "fill", "weight", "padding", "background", "border", "borderColor",
                 "radius", "opacity", "rotation", "scale", "offset", "clip", "visible",
+                // owl 6
+                "glow", "blur", "scaleX", "scaleY", "origin",
             )
 
-        val ANIMATABLE = setOf("opacity", "rotation", "scale", "value", "color", "background")
+        val ANIMATABLE = setOf("opacity", "rotation", "scale", "value", "color", "background", "blur", "scaleX", "scaleY")
 
         private val ALIGN = setOf("start", "center", "end", "top", "bottom", "topStart", "topEnd", "bottomStart", "bottomEnd")
         private val ENUMS =
@@ -72,7 +78,10 @@ class Compiler private constructor(
                 "align" to ALIGN,
                 "justify" to setOf("start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly"),
                 "fit" to setOf("contain", "cover", "fill"),
-                "font" to setOf("mono", "sans", "serif", "icon"),
+                // Any other font goes in quotes: an Android font's name, a font file's name or its path.
+                "font" to setOf("mono", "sans", "serif", "icon", "cursive", "system"),
+                "fontWeight" to setOf("thin", "light", "normal", "medium", "semibold", "bold", "black"),
+                "overflow" to setOf("ellipsis", "clip", "visible"),
                 "fill" to setOf("width", "height"),
                 "cap" to setOf("round", "butt", "square"),
             )
@@ -95,14 +104,20 @@ class Compiler private constructor(
                 // owl 3: pixel art from rows of letters, one color per letter.
                 "sprite" to DrawOp(4..4),
             )
-        private val DRAW_NAMED = setOf("fill", "stroke", "width", "cap", "radius", "closed", "size", "color", "align", "bold", "palette")
+        private val DRAW_NAMED = setOf("fill", "stroke", "width", "cap", "radius", "closed", "size", "color", "align", "bold", "palette", "font", "italic", "weight", "spacing")
 
-        /** What needs a newer language than 1, with the version: using one without `meta { owl: N }` is an error. */
+        /** What needs a newer language than 1, with the version; a widget's level is the newest it uses. */
         private val SINCE =
             mapOf("Terminal" to 2, "sprite" to 3) +
                 listOf("Slider", "Input", "file", "android.notifications", "android.volume", "volume", "notification", "every", "at", "when", "on").associateWith { 4 } +
                 // owl 5: a full-screen view of the widget.
-                listOf("screen", "close", "screenWidth", "screenHeight", "optional", "linux", "android.system").associateWith { 5 }
+                listOf("screen", "close", "screenWidth", "screenHeight", "optional", "linux", "android.system").associateWith { 5 } +
+                // owl 6: fonts and type, glow, blur, focus, screens without the launcher's window.
+                listOf(
+                    "fontWeight", "letterSpacing", "lineHeight", "underline", "strike", "fontFeatures", "overflow", "shadow",
+                    "glow", "blur", "scaleX", "scaleY", "origin", "onDoubleTap", "focused", "chrome",
+                )
+                    .associate { "prop:$it" to 6 }
 
         // No onLongPress: long-press belongs to the home screen, which lifts the tile to move it.
         /**
@@ -113,7 +128,13 @@ class Compiler private constructor(
         val MANAGERS = mapOf("pacman" to Regex("[a-z0-9@_+][a-z0-9@._+-]*"))
 
         private val HANDLER_PARAMS =
-            mapOf("onTap" to listOf("x", "y"), "onDrag" to listOf("dx", "dy", "x", "y"), "onChange" to listOf("value"), "onSubmit" to listOf("value"))
+            mapOf(
+                "onTap" to listOf("x", "y"),
+                "onDoubleTap" to listOf("x", "y"),
+                "onDrag" to listOf("dx", "dy", "x", "y"),
+                "onChange" to listOf("value"),
+                "onSubmit" to listOf("value"),
+            )
 
         /** Handlers only some nodes have. */
         private val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSubmit" to setOf("Input"))
@@ -133,14 +154,23 @@ class Compiler private constructor(
         /** notification("...", key) commands. */
         val NOTIFICATION = setOf("open", "dismiss")
 
-        /** The tile's size, readable anywhere a declaration of the same name doesn't shadow it. */
-        val TILE = setOf("cols", "rows", "tileWidth", "tileHeight", "screenWidth", "screenHeight")
+        /**
+         * The tile's size, readable anywhere a declaration of the same name doesn't shadow it; and
+         * `focused`: whether its Terminal has the keyboard, for a widget that marks its own focus.
+         */
+        val TILE = setOf("cols", "rows", "tileWidth", "tileHeight", "screenWidth", "screenHeight", "focused")
 
         /** Whether Linux is installed and running, for widgets with `optional` sources. Shadowable like [TILE]. */
         const val LINUX = "linux"
 
         /** Prefixes an `optional` source's command in [Program.commands], so a reviewer (and the store) can tell. */
         const val IF_LINUX = "if Linux is installed: "
+
+        /** The longest a cmd, stream or http source may take, in seconds. */
+        private const val MAX_TIMEOUT = 3600
+
+        /** The shortest `every` trigger interval, in seconds. */
+        private const val MIN_EVERY = 0.05
         private val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background")
     }
 
@@ -260,13 +290,13 @@ class Compiler private constructor(
         val screen = screens.firstOrNull()?.let { screen(it) }
         val onTap = body.handlers.firstOrNull()?.let { handler(it, root) }
         if (screen == null) screenAction?.let { fail("screen() and close() need a screen { } block in the widget", it) }
-        // Declared, so a launcher too old for it says "update the launcher" instead of failing on an unknown name.
-        needs?.let { (v, feature, pos) -> if (level < v) fail("$feature needs owl $v: add meta { owl: $v }", pos) }
+        // Not required: what a widget uses decides its level, which the store and older launchers go by.
+        val effective = maxOf(level, needs?.first ?: 1)
 
         return Program(
             name = ast.name ?: "widget",
             meta = meta,
-            level = level,
+            level = effective,
             size = props["size"]?.let { cells(it) },
             minSize = props["minSize"]?.let { cells(it) } ?: (1 to 1),
             page = props["page"]?.let { constInt(it) }?.coerceAtLeast(1) ?: 1,
@@ -277,6 +307,7 @@ class Compiler private constructor(
             root = rootNodes,
             screen = screen?.first,
             screenTitle = screen?.second,
+            screenChrome = screen?.third,
             onTap = onTap,
             triggers = triggers,
             commands = commands.toList(),
@@ -289,18 +320,20 @@ class Compiler private constructor(
         )
     }
 
-    /** The screen { } block: its nodes, and its title if it sets one. */
-    private fun screen(n: Item.Node): Pair<List<WNode>, Ev?> {
+    /** The screen { } block: its nodes, its title and whether it opens in the launcher's window, if it sets them. */
+    private fun screen(n: Item.Node): Triple<List<WNode>, Ev?, Ev?> {
         since("screen", n.pos)
         val body = n.body
-        for (p in body.props) if (p.name != "title") fail("a screen only takes title (its nodes go inside it)", p.pos)
+        for (p in body.props) if (p.name !in setOf("title", "chrome")) fail("a screen only takes title and chrome (its nodes go inside it)", p.pos)
+        if (body.props.any { it.name == "chrome" }) since("prop:chrome", n.pos)
         body.handlers.firstOrNull()?.let { fail("handlers go on the nodes inside a screen", it.pos) }
         body.animations.firstOrNull()?.let { fail("animate belongs inside a node", it.pos) }
         nodes = 0
         maxNodes = MAX_SCREEN_NODES
         val tree = items(body.items, root, Children.UI)
         if (tree.isEmpty()) fail("a screen needs at least one node", n.pos)
-        return tree to body.props.firstOrNull()?.let { ex(it.value, root) }
+        val props = body.props.associateBy { it.name }
+        return Triple(tree, props["title"]?.let { ex(it.value, root) }, props["chrome"]?.let { ex(it.value, root) })
     }
 
     private fun reserve(
@@ -346,7 +379,7 @@ class Compiler private constructor(
                 val url = ex(e.args[0], root)
                 (url.const as? Str)?.v?.let { if (!it.startsWith("https://") && !it.startsWith("http://")) fail("http takes an http:// or https:// URL", e.args[0].pos) }
                 commands += "http GET " + ((url.const as? Str)?.v ?: "(a URL built from widget values)")
-                Global.Source(d.name, "http", url, (every ?: 60.0).coerceAtLeast(5.0), d.json, timeout.coerceIn(1, 300), d.status, e.args.getOrNull(1)?.let { ex(it, root) })
+                Global.Source(d.name, "http", url, (every ?: 60.0).coerceAtLeast(1.0), d.json, timeout.coerceIn(1, MAX_TIMEOUT), d.status, e.args.getOrNull(1)?.let { ex(it, root) })
             }
             e is Expr.Call && e.name in setOf("cmd", "stream") -> {
                 if (e.args.size != 1 || e.named.isNotEmpty()) fail("${e.name}(\"command\") takes one command", e.pos)
@@ -354,7 +387,7 @@ class Compiler private constructor(
                 (arg.const as? Str)?.v?.let { scripts += it }
                 commands += listed + ((arg.const as? Str)?.v ?: "${e.name}(…) built from widget values")
                 if (!d.optional) guest = true
-                Global.Source(d.name, e.name, arg, (every ?: 60.0).coerceAtLeast(1.0), d.json, timeout.coerceIn(1, 300), d.status, optional = d.optional)
+                Global.Source(d.name, e.name, arg, (every ?: 60.0).coerceAtLeast(0.25), d.json, timeout.coerceIn(1, MAX_TIMEOUT), d.status, optional = d.optional)
             }
             e is Expr.Call && e.name == "file" -> {
                 if (e.args.size != 1 || e.named.isNotEmpty()) fail("file(\"~/path\") takes one path", e.pos)
@@ -366,13 +399,13 @@ class Compiler private constructor(
                 if (!d.optional) guest = true
                 Global.Source(d.name, "file", path, 0.0, d.json, 0, optional = d.optional)
             }
-            e is Expr.Name && e.name == "clock" -> Global.Source(d.name, "clock", null, (every ?: 1.0).coerceAtLeast(0.1), false, 0)
+            e is Expr.Name && e.name == "clock" -> Global.Source(d.name, "clock", null, (every ?: 1.0).coerceAtLeast(0.02), false, 0)
             e is Expr.Member && (e.e as? Expr.Name)?.name == "android" -> {
                 if (e.name !in ANDROID) fail("unknown android source '${e.name}' (${ANDROID.joinToString()})", e.pos)
                 since("android.${e.name}", e.pos)
                 // Listed with the commands, so the store shows it before anyone installs the widget.
                 if (e.name == "notifications") commands += "read Android notifications (apps, titles and text)"
-                Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(1.0), false, 0)
+                Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(0.25), false, 0)
             }
             else -> fail("a source is cmd(\"...\"), stream(\"...\"), http(\"...\"), file(\"...\"), clock, or android.${ANDROID.joinToString("/")}", e.pos)
         }
@@ -396,7 +429,7 @@ class Compiler private constructor(
 
     private fun asset(d: Decl.Asset): Global.Asset {
         val bytes = runCatching { Base64.getDecoder().decode(d.base64) }.getOrElse { fail("asset '${d.name}' isn't valid base64", d.pos) }
-        if (bytes.size > MAX_ASSET_BYTES) fail("asset '${d.name}' is over 2 MB", d.pos)
+        if (bytes.size > MAX_ASSET_BYTES) fail("asset '${d.name}' is over ${MAX_ASSET_BYTES shr 20} MB", d.pos)
         return Global.Asset(d.name, bytes)
     }
 
@@ -421,7 +454,7 @@ class Compiler private constructor(
         val expr =
             if (d.kind == "every") {
                 val seconds = constant(d.expr, "every").num() ?: fail("every takes an interval, like every 10s { ... }", d.expr.pos)
-                if (!(seconds >= 1)) fail("every runs at most once a second", d.expr.pos)
+                if (!(seconds >= MIN_EVERY)) fail("every runs at most ${(1 / MIN_EVERY).toInt()} times a second", d.expr.pos)
                 Ev.of(Num(seconds))
             } else {
                 ex(d.expr, root)
@@ -534,11 +567,13 @@ class Compiler private constructor(
         for (p in body.props) {
             if (p.name !in kind.props && p.name !in COMMON) fail("${n.type} has no property '${p.name}' (${(kind.props + COMMON).joinToString()})", p.pos)
             if (p.name in props) fail("'${p.name}' is set twice", p.pos)
+            since("prop:${p.name}", p.pos)
             props[p.name] = prop(p, scope)
         }
         val handlers =
             body.handlers.associate { h ->
                 if (h.name !in HANDLER_PARAMS) fail("unknown handler '${h.name}' (${HANDLER_PARAMS.keys.joinToString()})", h.pos)
+                since("prop:${h.name}", h.pos)
                 HANDLER_KINDS[h.name]?.let { kinds -> if (n.type !in kinds) fail("${h.name} only works on ${kinds.joinToString(" and ")}", h.pos) }
                 h.name to handler(h, scope)
             }
@@ -797,6 +832,7 @@ class Compiler private constructor(
         // Not reserved: widgets that already declare `rows` or `cols` keep their own.
         if (e.name in TILE || e.name == LINUX) {
             since(e.name, e.pos)
+            since("prop:${e.name}", e.pos)
             return Ev(null) { env -> env.host.tile(e.name) }
         }
         if (e.name in ENUMS.values.flatten()) fail("'${e.name}' isn't a value here", e.pos)

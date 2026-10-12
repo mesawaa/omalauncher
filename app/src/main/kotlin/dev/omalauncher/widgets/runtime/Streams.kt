@@ -91,7 +91,7 @@ class Streams(
             .shareIn(scope, SharingStarted.WhileSubscribed(LINGER, 0), replay = 1)
 
     companion object {
-        const val MAX = 4
+        const val MAX = 32
         private const val LINGER = 5000L
     }
 }

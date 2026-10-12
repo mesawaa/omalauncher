@@ -56,8 +56,11 @@ class Builtin(
 }
 
 object Builtins {
-    /** Lists built by widgets are capped; commands can print a lot. */
-    const val MAX_LIST = 1000
+    /** Lists built by widgets are capped, generously; commands can print a lot. */
+    const val MAX_LIST = 20_000
+
+    /** The widest pad(...) makes text: its own cap, so lists can grow without padding growing too. */
+    const val MAX_PAD = 10_000
 
     val theme =
         setOf(
@@ -70,7 +73,7 @@ object Builtins {
     val constants = mapOf("pi" to Num(PI), "transparent" to Col(null, 0))
 
     /** Handler-only calls; they reach [Host.act]. */
-    val actions = mapOf("terminal" to 1..2, "app" to 1..1, "run" to 1..1, "url" to 1..1, "launcher" to 1..1, "refresh" to 0..1, "media" to 1..1, "androidApp" to 1..1, "copy" to 1..1, "notify" to 1..2, "volume" to 1..1, "notification" to 2..2, "screen" to 0..0, "close" to 0..0)
+    val actions = mapOf("terminal" to 1..2, "app" to 1..1, "run" to 1..1, "url" to 1..2, "launcher" to 1..1, "refresh" to 0..1, "media" to 1..1, "androidApp" to 1..1, "copy" to 1..1, "notify" to 1..2, "volume" to 1..1, "notification" to 2..2, "screen" to 0..0, "close" to 0..0)
 
     private fun lst(items: List<Value>) = Lst(if (items.size > MAX_LIST) items.subList(0, MAX_LIST) else items)
 
@@ -194,7 +197,7 @@ object Builtins {
     private fun fixed(
         x: Double,
         digits: Int,
-    ) = String.format(Locale.ROOT, "%.${digits.coerceIn(0, 10)}f", x)
+    ) = String.format(Locale.ROOT, "%.${digits.coerceIn(0, 20)}f", x)
 
     fun interface Num1 {
         fun of(x: Double): Double
@@ -259,8 +262,8 @@ object Builtins {
     val all: Map<String, Builtin> =
         mapOf(
             // numbers
-            "min" to Builtin(1, 16) { a -> if (a.size == 1) a.list(0).mapNotNull { it.num() }.minOrNull()?.let(::n) ?: Null else n(a.args.minOf { it.num() ?: Double.MAX_VALUE }) },
-            "max" to Builtin(1, 16) { a -> if (a.size == 1) a.list(0).mapNotNull { it.num() }.maxOrNull()?.let(::n) ?: Null else n(a.args.maxOf { it.num() ?: -Double.MAX_VALUE }) },
+            "min" to Builtin(1, 256) { a -> if (a.size == 1) a.list(0).mapNotNull { it.num() }.minOrNull()?.let(::n) ?: Null else n(a.args.minOf { it.num() ?: Double.MAX_VALUE }) },
+            "max" to Builtin(1, 256) { a -> if (a.size == 1) a.list(0).mapNotNull { it.num() }.maxOrNull()?.let(::n) ?: Null else n(a.args.maxOf { it.num() ?: -Double.MAX_VALUE }) },
             "clamp" to Builtin(3, 3) { a -> n(a.num(0).coerceIn(a.num(1), a.num(2).coerceAtLeast(a.num(1)))) },
             "lerp" to Builtin(3, 3) { a -> n(a.num(0) + (a.num(1) - a.num(0)) * a.num(2)) },
             "round" to
@@ -327,7 +330,7 @@ object Builtins {
             "pad" to
                 Builtin(2, 3) { a ->
                     // Capped: a width like a timestamp would allocate gigabytes.
-                    val w = a.int(1, 0).coerceIn(-MAX_LIST, MAX_LIST)
+                    val w = a.int(1, 0).coerceIn(-MAX_PAD, MAX_PAD)
                     val c = a.str(2).firstOrNull() ?: ' '
                     Str(if (w >= 0) a.str(0).padStart(w, c) else a.str(0).padEnd(-w, c))
                 }.strict(),

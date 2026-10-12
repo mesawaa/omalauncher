@@ -22,7 +22,9 @@ import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.graphics.toArgb
 import dev.omalauncher.linux.ShellResult
 import dev.omalauncher.ui.EmbeddedTerminal
+import dev.omalauncher.ui.Fonts
 import dev.omalauncher.ui.Palette
+import androidx.compose.ui.text.font.FontFamily
 import dev.omalauncher.widgets.lang.Budget
 import dev.omalauncher.widgets.lang.Env
 import dev.omalauncher.widgets.lang.Ev
@@ -246,6 +248,40 @@ class WidgetInstance(
 
     override fun time() = frameTime.doubleValue
 
+    /** Whether the tile's Terminal has the keyboard: `focused`, for a widget that marks its own focus. */
+    private val focusedState = mutableStateOf(false)
+
+    fun setFocused(on: Boolean) {
+        focusedState.value = on
+    }
+
+    /** Bumped whenever a font a widget asked for has loaded, so text that uses it redraws. */
+    val fontsLoaded = mutableIntStateOf(0)
+
+    private val fontRequests = HashSet<String>()
+
+    /**
+     * The family a widget's `font` names (see [Fonts]): at once if it's built in or loaded, else
+     * null while it loads off the main thread; [fontsLoaded] changes when it arrives. A name
+     * that finds nothing is reported, so `owl-check` says so.
+     */
+    fun font(spec: String): FontFamily? {
+        Fonts.cached(spec)?.let { return it }
+        if (fontRequests.add(spec)) {
+            scope?.launch {
+                val family = withContext(Dispatchers.IO) { Fonts.load(spec, services::guestFile) }
+                if (family == null) {
+                    report("font '$spec' isn't installed: put its file in ~/.local/share/fonts, give its path, or use an Android font's name")
+                    // Looked for again later, in case it's installed meanwhile.
+                    fontRequests.remove(spec)
+                } else {
+                    fontsLoaded.intValue++
+                }
+            }
+        }
+        return null
+    }
+
     fun setTile(
         cols: Int?,
         rows: Int?,
@@ -270,6 +306,7 @@ class WidgetInstance(
         val v =
             when (name) {
                 "linux" -> return bool(linux())
+                "focused" -> return bool(focusedState.value)
                 "screenWidth" -> screenSize.value[0]
                 "screenHeight" -> screenSize.value[1]
                 "cols" -> tileSize.value[0]
@@ -367,7 +404,7 @@ class WidgetInstance(
     }
 
     override fun report(message: String) {
-        if (reported.add(message) && reported.size < 50) {
+        if (reported.add(message) && reported.size < 500) {
             Log.w("widgets", "${program.name}: $message")
             onError(message)
         }
@@ -423,7 +460,7 @@ class WidgetInstance(
                             val bytes = (program.globals.firstOrNull { it.name == src.removePrefix("asset:") } as? Global.Asset)?.bytes
                             bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
                         } else {
-                            file.takeIf { it.length() < 8 shl 20 }?.let { decodeSampled(it, MAX_IMAGE_SIDE / 2) }
+                            file.takeIf { it.length() < MAX_IMAGE_FILE }?.let { decodeSampled(it, MAX_IMAGE_SIDE / 2) }
                         }
                         // A small PNG can hold a huge flat image; drawing one over Android's limit throws on every frame.
                     }.getOrNull()?.takeIf { it.byteCount <= MAX_IMAGE_BYTES }.let { Result.success(it) }
@@ -511,7 +548,12 @@ class WidgetInstance(
                                 untilPaused(active, g) {
                                     // A path built from state is watched anew when it changes.
                                     snapshotFlow { eval(g.arg!!, root, g.name) }.collectLatest { path ->
-                                        if (path != Null) services.fileUpdates(path.toString()).collect { text -> set(slot, g, text) }
+                                        if (path != Null) {
+                                            services.fileUpdates(path.toString()).collect { text ->
+                                                write(slot, parse(g, text))
+                                                sample(g)
+                                            }
+                                        }
                                     }
                                 }
                             else -> {
@@ -519,7 +561,7 @@ class WidgetInstance(
                                 val start = System.currentTimeMillis()
                                 update(slot, g)
                                 // An interval of NaN ("NaN" is a number) would be 0: a % by zero for a clock, a busy loop otherwise.
-                                val wait = (g.every * 1000).toLong().coerceAtLeast(100)
+                                val wait = (g.every * 1000).toLong().coerceAtLeast(20)
                                 // Clocks tick on the second (or minute) boundary so displays change in step;
                                 // other intervals count from the start of the update, however long it took.
                                 val target = if (g.kind == "clock") wait - System.currentTimeMillis() % wait else (start + wait - System.currentTimeMillis()).coerceAtLeast(0)
@@ -585,8 +627,8 @@ class WidgetInstance(
                 scope.launch {
                     when (t.kind) {
                         "every" -> {
-                            // At least a second, as the compiler means it to be: a NaN interval would spin the main thread.
-                            val ms = (t.expr.const!!.num()!! * 1000).toLong().coerceAtLeast(1000)
+                            // At least as long as the compiler allows: a NaN interval would spin the main thread.
+                            val ms = (t.expr.const!!.num()!! * 1000).toLong().coerceAtLeast(50)
                             while (isActive) {
                                 snapshotFlow { active() }.first { it }
                                 delay(ms)
@@ -705,7 +747,7 @@ class WidgetInstance(
                             } else {
                                 services.cmd(target, g.timeout)
                             }
-                        val out = if (g.json) Json.parseOrText(r.out) else Str(r.out)
+                        val out = parse(g, r.out)
                         if (g.status) {
                             Obj(mapOf("out" to out, "err" to Str(r.err), "code" to Num(r.code.toDouble()), "ok" to bool(ok(g, r))))
                         } else {
@@ -750,6 +792,17 @@ class WidgetInstance(
         }
     }
 
+    /** A source's text as its value: parsed when it's `json`, off the main thread once it's big. */
+    private suspend fun parse(
+        g: Global.Source,
+        text: String,
+    ): Value =
+        when {
+            !g.json -> Str(text)
+            text.length < 64_000 -> Json.parseOrText(text)
+            else -> withContext(Dispatchers.Default) { Json.parseOrText(text) }
+        }
+
     private fun set(
         slot: Int,
         g: Global.Source,
@@ -789,7 +842,8 @@ class WidgetInstance(
     private val lastSample = HashMap<Int, Value>()
 
     companion object {
-        private const val SLOW_DRAW_NANOS = 4_000_000.0
+        /** A widget slower than this per frame on average animates at half rate (60 fps is 16 ms a frame). */
+        private const val SLOW_DRAW_NANOS = 12_000_000.0
 
         /** Draws at the start that aren't timed: about two seconds at full rate. */
         private const val WARMUP_DRAWS = 120
@@ -798,18 +852,21 @@ class WidgetInstance(
         private const val IMAGE_RECHECK_MS = 5_000L
 
         /** Runs per trigger per second before it's held back. */
-        private const val MAX_TRIGGER_RUNS = 10
+        private const val MAX_TRIGGER_RUNS = 120
 
         /** Distinct sprites kept per widget. */
         private const val MAX_SPRITES = 64
 
         /** Distinct images kept per widget. */
-        private const val MAX_IMAGES = 32
+        private const val MAX_IMAGES = 256
 
         /** Images are decoded no larger than needed for a tile this big, in pixels. */
-        private const val MAX_IMAGE_SIDE = 1080
+        private const val MAX_IMAGE_SIDE = 4096
+
+        /** Image files up to this many bytes are read. */
+        private const val MAX_IMAGE_FILE = 64 shl 20
 
         /** Decoded images larger than this are dropped; Android refuses to draw past 100 MB. */
-        private const val MAX_IMAGE_BYTES = 32 shl 20
+        private const val MAX_IMAGE_BYTES = 96 shl 20
     }
 }

@@ -1,5 +1,6 @@
 package dev.omalauncher.widgets.render
 
+import android.graphics.BlurMaskFilter
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -44,13 +46,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorProducer
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -76,6 +87,7 @@ import dev.omalauncher.ui.TerminalView
 import dev.omalauncher.widgets.lang.Action
 import dev.omalauncher.widgets.lang.Builtins
 import dev.omalauncher.widgets.lang.Env
+import dev.omalauncher.widgets.lang.Gradient
 import dev.omalauncher.widgets.lang.Lst
 import dev.omalauncher.widgets.lang.Null
 import dev.omalauncher.widgets.lang.Num
@@ -108,7 +120,18 @@ fun WidgetContent(
     Column(
         modifier
             .onSizeChanged { inst.setTile(null, null, (it.width / density).toDouble(), (it.height / density).toDouble()) }
-            .then(if (bg != null) Modifier.drawBehind { Builtins.argb(inst.eval(bg, inst.root, "background"), inst)?.let { drawRect(Color(it)) } } else Modifier)
+            .then(
+                if (bg != null) {
+                    Modifier.drawBehind {
+                        when (val v = inst.eval(bg, inst.root, "background")) {
+                            is Gradient -> drawRect(gradientBrush(v, inst, density))
+                            else -> Builtins.argb(v, inst)?.let { drawRect(Color(it)) }
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .padding(inset(program.padding)),
     ) {
         Nodes(program.root, inst.root, inst, this)
@@ -230,8 +253,8 @@ internal fun items(v: Value): List<Value> =
 
 private val SIZING = setOf("width", "height", "size", "fill", "weight")
 
-/** Lengths past this, in dp, are clamped: in a scrolling Column a bigger one can't be represented and fails the layout. */
-private const val MAX_DP = 4000.0
+/** Lengths past this, in dp, are clamped: in a scrolling Column a much bigger one can't be represented and fails the layout. */
+private const val MAX_DP = 20_000.0
 
 /** A padding in dp: Compose throws on a negative or NaN one. */
 private fun inset(n: Double) = (if (n >= 0) n.coerceAtMost(MAX_DP) else 0.0).dp
@@ -277,25 +300,32 @@ private fun Element(
                     Nodes(el.children, env, inst, this)
                 }
             } else {
-                Row(mod, horizontalArrangement = arr, verticalAlignment = vertical) { Nodes(el.children, env, inst, this) }
+                val scroll = if (p.observe("scroll")?.truthy == true) Modifier.horizontalScroll(rememberScrollState()) else Modifier
+                Row(mod.then(scroll), horizontalArrangement = arr, verticalAlignment = vertical) { Nodes(el.children, env, inst, this) }
             }
         }
         "Box" -> Box(mod, contentAlignment = boxAlign(p.observe("align")?.toString())) { Nodes(el.children, env, inst, this) }
-        "Grid" -> Grid(mod, (p.observe("columns")?.num() ?: 2.0).toInt().coerceIn(1, 12), (p.observe("gap")?.num() ?: 6.0).dp) { Nodes(el.children, env, inst, null) }
+        "Grid" -> Grid(mod, (p.observe("columns")?.num() ?: 2.0).toInt().coerceIn(1, 48), (p.observe("gap")?.num() ?: 6.0).dp) { Nodes(el.children, env, inst, null) }
         "Text" -> TextNode(p, mod)
         "Button" -> {
             val color = p.color("color") { Palette.accent }
             val radius = p.float("radius", 8f * LauncherStyle.corners.scale)
-            Box(
-                mod
-                    .drawBehind {
+            // A `border` of the widget's own replaces the button's outline, and its `padding` the button's.
+            val outline =
+                if (p.has("border")) {
+                    Modifier
+                } else {
+                    Modifier.drawBehind {
                         val w = 1.dp.toPx()
                         val r = CornerRadius(radius().dp.toPx())
                         drawRoundRect(color(), Offset(w / 2, w / 2), Size(size.width - w, size.height - w), r, style = Stroke(w))
-                    }.padding(horizontal = 10.dp, vertical = 6.dp),
+                    }
+                }
+            Box(
+                mod.then(outline).then(if (p.has("padding")) Modifier else Modifier.padding(horizontal = 10.dp, vertical = 6.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                BasicText(p.observe("text")?.text().orEmpty(), style = WidgetMono, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ColorProducer { color() })
+                BasicText(p.observe("text")?.text().orEmpty(), style = typeStyle(p, 13.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, color = ColorProducer { color() })
             }
         }
         "Progress" -> {
@@ -502,44 +532,124 @@ private fun common(
                 IntOffset(((o?.items?.getOrNull(0)?.num() ?: 0.0) * density).toInt(), ((o?.items?.getOrNull(1)?.num() ?: 0.0) * density).toInt())
             }
     }
-    val hasLayer = p.has("opacity") || p.has("rotation") || p.has("scale") || p.has("clip")
+    val hasLayer = LAYER.any { p.has(it) }
     if (hasLayer) {
         val opacity = p.float("opacity", 1f)
         val rotation = p.float("rotation", 0f)
         val scale = p.float("scale", 1f)
+        val scaleX = p.float("scaleX", 1f)
+        val scaleY = p.float("scaleY", 1f)
+        val blur = p.float("blur", 0f)
         val clip = p.observe("clip")?.truthy == true
-        val radius = p.observe("radius")?.num() ?: 0.0
+        val corners = if (clip) radii(p.observe("radius"), 0f) else null
+        val origin = p.has("origin")
         m =
             m.graphicsLayer {
                 alpha = opacity().coerceIn(0f, 1f)
                 rotationZ = rotation()
                 scale().let {
-                    scaleX = it
-                    scaleY = it
+                    this.scaleX = it * scaleX()
+                    this.scaleY = it * scaleY()
                 }
-                if (clip) {
+                // `origin: [0.5, 1]`: what rotation and scale pivot on, as fractions of the size.
+                if (origin) {
+                    val o = p.now("origin") as? Lst
+                    transformOrigin = TransformOrigin(o?.items?.getOrNull(0)?.num()?.toFloat() ?: 0.5f, o?.items?.getOrNull(1)?.num()?.toFloat() ?: 0.5f)
+                }
+                // Blur needs Android 12; before it, the content stays sharp.
+                val b = blur().dp.toPx()
+                renderEffect = if (b > 0f && Build.VERSION.SDK_INT >= 31) BlurEffect(b, b, TileMode.Decal) else null
+                if (corners != null) {
                     this.clip = true
-                    shape = RoundedCornerShape(radius.dp)
+                    shape = RoundedCornerShape(corners[0].dp, corners[1].dp, corners[2].dp, corners[3].dp)
                 }
             }
     }
-    if (p.has("background") || p.has("border")) {
+    if (p.has("background") || p.has("border") || p.has("glow")) {
         val bg = p.color("background") { Color.Transparent }
         val borderColor = p.color("borderColor") { Palette.border }
         val border = p.float("border", 0f)
         // Bordered elements (buttons, frames) follow the launcher's corner style unless they set a radius.
         val radius = p.float("radius", if (p.has("border")) 8f * LauncherStyle.corners.scale else 0f)
+        val perCorner = p.has("radius") && p.el.props["radius"]?.const.let { it == null || it is Lst }
+        val gradient = p.has("background")
         m =
             m.drawBehind {
-                val r = CornerRadius(radius().dp.toPx())
-                drawRoundRect(bg(), cornerRadius = r)
+                val r = if (perCorner) radii(p.now("radius"), radius()) else FloatArray(4) { radius() }
+                p.now("glow")?.takeIf { it != Null }?.let { glow(it, r, p) }
+                val fill = (if (gradient) p.now("background") as? Gradient else null)?.let { gradientBrush(it, p.inst, density) }
                 val w = border().dp.toPx()
-                if (w > 0f) drawRoundRect(borderColor(), Offset(w / 2, w / 2), Size(size.width - w, size.height - w), r, style = Stroke(w))
+                if (r.all { it == r[0] }) {
+                    val cr = CornerRadius(r[0].dp.toPx())
+                    if (fill != null) drawRoundRect(fill, cornerRadius = cr) else drawRoundRect(bg(), cornerRadius = cr)
+                    if (w > 0f) drawRoundRect(borderColor(), Offset(w / 2, w / 2), Size(size.width - w, size.height - w), cr, style = Stroke(w))
+                } else {
+                    val shape = Path().apply { addRoundRect(roundRect(0f, 0f, size.width, size.height, r)) }
+                    if (fill != null) drawPath(shape, fill) else drawPath(shape, bg())
+                    if (w > 0f) drawPath(Path().apply { addRoundRect(roundRect(w / 2, w / 2, size.width - w / 2, size.height - w / 2, r)) }, borderColor(), style = Stroke(w))
+                }
             }
     }
     m = m.then(handlers(p))
     padding(p.observe("padding"))?.let { m = m.padding(it) }
     return m
+}
+
+/** Properties drawn through a graphics layer. */
+private val LAYER = setOf("opacity", "rotation", "scale", "scaleX", "scaleY", "origin", "blur", "clip")
+
+/** `radius`: one for every corner, or [top left, top right, bottom right, bottom left]. */
+private fun radii(
+    v: Value?,
+    default: Float,
+): FloatArray {
+    val l = (v as? Lst)?.items
+    if (l != null && l.size == 4) return FloatArray(4) { (l[it].num()?.toFloat() ?: 0f).coerceAtLeast(0f) }
+    val one = v?.num()?.toFloat()?.coerceAtLeast(0f) ?: default
+    return FloatArray(4) { one }
+}
+
+/** A rounded rectangle with [r] (dp) at its corners, in pixels. */
+private fun DrawScope.roundRect(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    r: FloatArray,
+) = RoundRect(
+    left,
+    top,
+    right,
+    bottom,
+    CornerRadius(r[0].dp.toPx()),
+    CornerRadius(r[1].dp.toPx()),
+    CornerRadius(r[2].dp.toPx()),
+    CornerRadius(r[3].dp.toPx()),
+)
+
+/**
+ * `glow: color`, or `glow: {color, blur, x, y}` (dp): a soft light around the element's shape, drawn
+ * under it and past its edges (a parent with `clip` cuts it off), like a CRT's bloom or a drop shadow.
+ */
+private fun DrawScope.glow(
+    v: Value,
+    r: FloatArray,
+    p: Props,
+) {
+    val o = (v as? Obj)?.fields
+    val color = p.color(o?.get("color") ?: v) ?: return
+    val blur = ((o?.get("blur")?.num() ?: 12.0).toFloat()).coerceAtLeast(0.5f).dp.toPx()
+    val dx = (o?.get("x")?.num()?.toFloat() ?: 0f).dp.toPx()
+    val dy = (o?.get("y")?.num()?.toFloat() ?: 0f).dp.toPx()
+    val radius = r.average().toFloat().dp.toPx()
+    drawIntoCanvas { canvas ->
+        val paint =
+            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color.toArgb()
+                maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+            }
+        canvas.nativeCanvas.drawRoundRect(dx, dy, size.width + dx, size.height + dy, radius, radius, paint)
+    }
 }
 
 @Composable
@@ -552,8 +662,16 @@ private fun handlers(p: Props): Modifier {
         a: Action,
         vararg v: Float,
     ) = a.run(p.env, v.map { Num((it / density).toDouble()) })
-    el.handlers["onTap"]?.let { a ->
-        m = m.pointerInput(el, p.env) { detectTapGestures { o -> fire(a, o.x, o.y) } }
+    val tap = el.handlers["onTap"]
+    val doubleTap = el.handlers["onDoubleTap"]
+    if (tap != null || doubleTap != null) {
+        m =
+            m.pointerInput(el, p.env) {
+                detectTapGestures(
+                    onDoubleTap = doubleTap?.let { a -> { o -> fire(a, o.x, o.y) } },
+                    onTap = tap?.let { a -> { o -> fire(a, o.x, o.y) } },
+                )
+            }
     }
     el.handlers["onDrag"]?.let { a ->
         m = m.pointerInput(el, p.env) { detectDragGestures { change, drag -> change.consume(); fire(a, drag.x, drag.y, change.position.x, change.position.y) } }
@@ -567,42 +685,40 @@ private fun TextNode(
     mod: Modifier,
 ) {
     val style = p.observe("style")?.toString()
-    val base =
+    val size =
         when (style) {
-            "huge" -> WidgetMono.copy(fontSize = 44.sp)
-            "title" -> WidgetMono.copy(fontSize = 20.sp)
-            "small", "label" -> WidgetMono.copy(fontSize = 11.sp)
-            else -> WidgetMono
+            "huge" -> 44.sp
+            "title" -> 20.sp
+            "small", "label" -> 11.sp
+            else -> WidgetMono.fontSize
         }
     val defaultColor: () -> Color = if (style == "muted" || style == "label") ({ Palette.muted }) else ({ Palette.foreground })
     val color = p.color("color", defaultColor)
+    // `color: linear(...)` paints the text with a gradient; a plain color is read while drawing, without recomposing.
+    val gradient = p.el.props["color"]?.const as? Gradient
+    val density = LocalDensity.current.density
     val textStyle =
-        TextStyle(
-            fontFamily =
-                when (p.observe("font")?.toString()) {
-                    "sans" -> FontFamily.SansSerif
-                    "serif" -> FontFamily.Serif
-                    "icon" -> NerdSymbols
-                    else -> FontFamily.Monospace
-                },
-            fontSize = p.observe("fontSize")?.num()?.sp ?: base.fontSize,
-            fontWeight = if (p.observe("bold")?.truthy == true) FontWeight.Bold else null,
-            fontStyle = if (p.observe("italic")?.truthy == true) FontStyle.Italic else null,
+        typeStyle(p, size).copy(
             textAlign =
                 when (p.observe("align")?.toString()) {
                     "center" -> TextAlign.Center
                     "end" -> TextAlign.End
                     else -> TextAlign.Start
                 },
-        )
+        ).let { if (gradient != null) it.copy(brush = gradientBrush(gradient, p.inst, density)) else it }
     BasicText(
         p.observe("text")?.text().orEmpty(),
         if (p.has("width") || p.has("weight") || p.has("fill")) mod else mod.fillMaxWidth(),
         style = textStyle,
         // Big text stays on one line in narrow tiles instead of breaking mid-word.
         maxLines = p.observe("maxLines")?.num()?.toInt()?.coerceAtLeast(1) ?: if (style == "huge" || style == "title") 1 else Int.MAX_VALUE,
-        overflow = TextOverflow.Ellipsis,
-        color = ColorProducer { color() },
+        overflow =
+            when (p.observe("overflow")?.toString()) {
+                "clip" -> TextOverflow.Clip
+                "visible" -> TextOverflow.Visible
+                else -> TextOverflow.Ellipsis
+            },
+        color = if (gradient != null) null else ColorProducer { color() },
     )
 }
 

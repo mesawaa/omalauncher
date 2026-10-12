@@ -98,6 +98,6 @@ class Notifications(
     }
 
     companion object {
-        private const val MAX_ITEMS = 50
+        private const val MAX_ITEMS = 500
     }
 }

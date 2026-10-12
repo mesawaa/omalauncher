@@ -24,7 +24,6 @@ import android.widget.Toast
 import dev.omalauncher.MainActivity
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
-import dev.omalauncher.linux.GuestShell
 import dev.omalauncher.linux.Proot
 import dev.omalauncher.linux.ShellPool
 import dev.omalauncher.linux.ShellResult
@@ -58,7 +57,10 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val MAX_HTTP_BYTES = 1 shl 20
+private const val MAX_HTTP_BYTES = 16 shl 20
+
+/** How long a run(...) action may take, in seconds. */
+private const val ACTION_TIMEOUT = 600
 private const val NOTIFY_CHANNEL = "widgets"
 
 /**
@@ -72,10 +74,10 @@ class WidgetServices(
     private val scope: CoroutineScope,
 ) : Services {
     /** Sources share a few shells, so one slow command doesn't stall the rest. */
-    val shells = ShellPool(proot, 3)
+    val shells = ShellPool(proot, 8)
 
-    /** Actions get their own shell: a long run(...) never delays widget updates. */
-    private val actionShell = GuestShell(proot)
+    /** Actions get their own shells: a long run(...) never delays widget updates, or another tap's run(...). */
+    private val actionShells = ShellPool(proot, 4)
     private val streams = Streams(proot, scope)
 
     /** What's playing on the phone. */
@@ -279,7 +281,7 @@ class WidgetServices(
             // Named after the command (btop, dua, ...) unless the widget passes a name.
             "terminal" -> runtime.terminal("$arg; exec bash", args.getOrNull(1)?.toString() ?: arg.substringBefore(' '))
             "app" -> runtime.launch(arg)
-            "url" -> context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(arg)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "url" -> openUrl(arg, args.getOrNull(1)?.takeIf { it != Null }?.toString())
             "launcher" -> launcherAction?.invoke(arg)
             "media" -> media.control(arg)
             "volume" -> volume.control(args[0])
@@ -300,7 +302,37 @@ class WidgetServices(
         done: (ShellResult?) -> Unit,
     ) {
         // Never retried: a shell dying mid-command must not run a side effect twice.
-        scope.launch { done(runCatching { actionShell.run(command, 30, retry = false) }.getOrNull()) }
+        scope.launch { done(runCatching { actionShells.run(command, ACTION_TIMEOUT, retry = false) }.getOrNull()) }
+    }
+
+    /**
+     * url(uri, package?): opens [uri] in whatever app handles it, or in [pkg] (a deep link into one app).
+     * An `intent:` URI is a whole intent (action, component, extras). It can't grant other apps access to
+     * the launcher's files, the way a shared widget could otherwise hand out ~/.claude, nor start the
+     * launcher's own screens; launcher(...) is for those.
+     */
+    private fun openUrl(
+        uri: String,
+        pkg: String?,
+    ) {
+        val intent =
+            if (uri.startsWith("intent:")) {
+                // A malformed one throws a checked exception, which handlers wouldn't catch.
+                runCatching { Intent.parseUri(uri, Intent.URI_INTENT_SCHEME) }.getOrElse { throw IllegalArgumentException("not an intent: URI: ${it.message}") }.apply {
+                    removeFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
+                    )
+                    clipData = null
+                    selector = null
+                }
+            } else {
+                Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri))
+            }
+        if (pkg != null) intent.setPackage(pkg)
+        val own = context.packageName
+        if (intent.`package` == own || intent.component?.packageName == own) throw IllegalArgumentException("url(...) doesn't open the launcher itself; use launcher(...)")
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     override suspend fun http(

@@ -4,12 +4,7 @@ import android.graphics.Typeface
 import android.graphics.fonts.SystemFonts
 import android.os.SystemClock
 import android.util.Log
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.text.font.FontFamily
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -117,26 +112,4 @@ object Fonts {
 
     private const val MISS_MS = 15_000L
     private const val TAG = "fonts"
-}
-
-/**
- * The family [spec] names (see [Fonts]), or [fallback] while it loads and when there's no such font;
- * [onMissing] hears about a name that found nothing.
- */
-@Composable
-fun rememberFont(
-    spec: String?,
-    fallback: FontFamily,
-    guestFile: (String) -> File,
-    onMissing: (String) -> Unit = {},
-): FontFamily {
-    if (spec.isNullOrBlank()) return fallback
-    Fonts.builtIn(spec)?.let { return it }
-    val family by produceState(Fonts.cached(spec), spec) {
-        if (value == null) {
-            value = withContext(Dispatchers.IO) { Fonts.load(spec, guestFile) }
-            if (value == null) onMissing(spec)
-        }
-    }
-    return family ?: fallback
 }

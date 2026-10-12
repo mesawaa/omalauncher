@@ -14,8 +14,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
-/** A watched file is read up to this much; widgets show a few values, not whole logs. */
-private const val MAX_FILE_BYTES = 1 shl 20
+/** A watched file is read up to this much. */
+private const val MAX_FILE_BYTES = 16 shl 20
 
 /**
  * [file]'s text now and after every change, for `source x = file(...)`.

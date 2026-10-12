@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,7 +43,8 @@ internal fun WidgetTile(
     waitsForLinux: LinuxState? = null,
     onInstallLinux: () -> Unit = {},
 ) {
-    // No frame or focus outline from the launcher: the widget draws its own, or none.
+    // No frame or focus outline from the launcher: the widget draws its own, or none, and reads `focused`.
+    SideEffect { instance?.setFocused(focused) }
     Box(
         modifier
             .widgetTile(ownBackground = instance?.program?.background != null && waitsForLinux == null && needs.isEmpty())
@@ -125,7 +127,9 @@ internal fun WidgetScreenPanel(
     onDismiss: () -> Unit,
 ) {
     val title = instance.program.screenTitle?.let { instance.eval(it, instance.root, "title").text() } ?: spec.name
-    NaviPanel(title, onDismiss) {
+    // `chrome: false`: the widget's own nodes, edge to edge, without the launcher's window.
+    val chrome = instance.program.screenChrome?.let { instance.eval(it, instance.root, "chrome").truthy } ?: true
+    NaviPanel(title, onDismiss, chrome = chrome) {
         WidgetScreen(instance, Modifier.weight(1f).fillMaxWidth())
     }
 }

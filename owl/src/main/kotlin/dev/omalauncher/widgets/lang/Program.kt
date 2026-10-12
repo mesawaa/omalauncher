@@ -21,7 +21,8 @@ interface Host {
 
     /**
      * The tile's size: cols and rows in grid cells, tileWidth and tileHeight in dp; null until it's laid out.
-     * Also screenWidth and screenHeight (its screen's size), and linux: whether Linux is installed and running.
+     * Also screenWidth and screenHeight (its screen's size), linux: whether Linux is installed and running,
+     * and focused: whether the tile's Terminal has the keyboard.
      */
     fun tile(name: String): Value = Null
 
@@ -42,9 +43,12 @@ interface Host {
     fun report(message: String) {}
 }
 
-/** Caps the work of one evaluation, so a widget can't freeze the launcher with nested maps over big lists. */
+/**
+ * Caps the work of one evaluation, so a runaway widget (nested maps over big lists) can't freeze
+ * the launcher. Generous: it only stops what would hang the home screen.
+ */
 class Budget(
-    private val limit: Int = 200_000,
+    private val limit: Int = 5_000_000,
 ) {
     private var steps = 0
     private var depth = 0
@@ -284,6 +288,8 @@ class Program(
     /** The screen { } block: a full-screen view over the same globals, opened with screen(). */
     val screen: List<WNode>? = null,
     val screenTitle: Ev? = null,
+    /** False: the screen fills the display with the widget's own nodes, without the launcher's window around them. */
+    val screenChrome: Ev? = null,
     val onTap: Action?,
     val triggers: List<Trigger>,
     /** Shell commands this widget can run, known without running it; for reviewing shared widgets. */
