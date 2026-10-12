@@ -106,17 +106,29 @@ fun fixDependenciesCommand(
         "The last lines from pacman were:\n$log\n",
 )
 
-/** A terminal tile that opens straight into [agent] in the home directory, and falls back to a shell when it exits. */
+/**
+ * A terminal tile that opens straight into [agent] in the home directory, and falls back to a shell when it exits:
+ * a Navi window whose frame and title light up while it has the keyboard.
+ */
 fun agentWidget(agent: Agent) =
     """
     widget "${agent.bin}" {
       size: 6x6
       minSize: 3x4
       padding: 0
+      background: background
 
-      meta { owl: 2; description: "${agent.name} in a terminal on the home screen" }
+      meta { description: "${agent.name} in a terminal on the home screen, in a Navi window" }
 
       // Tap to type; tap outside or press Back to let go. When ${agent.name} exits, the shell stays.
-      Terminal { command: 'cd ~ && ${agent.bin}; exec bash' }
+      Column { fill: true; gap: 0; border: 1; borderColor: focused ? accent : border; radius: 0
+        Row { fill: width; height: 22; gap: 6; align: center; padding: [8, 0, 4, 0]; background: selection
+          Text { text: "NAVI :: ${agent.name.uppercase()}"; font: mono; fontSize: 11; letterSpacing: 1; color: focused ? bright_foreground : foreground; weight: 1; maxLines: 1 }
+          Box { width: 14; height: 14; align: center; border: 1; borderColor: border; radius: 0
+            Text { text: "×"; font: mono; fontSize: 11; align: center }
+          }
+        }
+        Terminal { command: 'cd ~ && ${agent.bin}; exec bash'; weight: 1; fill: width }
+      }
     }
     """.trimIndent() + "\n"

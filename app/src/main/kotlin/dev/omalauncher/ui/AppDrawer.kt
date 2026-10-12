@@ -432,7 +432,7 @@ private fun AskRow(
         Modifier
             .padding(bottom = 6.dp)
             .fillMaxWidth()
-            .then(if (selected) Modifier.frame(2.dp, Palette.accent, Palette.background) else Modifier.clip(LauncherStyle.shape()))
+            .then(if (selected) Modifier.frame(1.dp, Palette.accent, Palette.background) else Modifier.clip(LauncherStyle.shape()))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -508,7 +508,7 @@ private fun AppCell(
             .fillMaxWidth()
             .alpha(if (paused) PausedAlpha else 1f)
             .clip(LauncherStyle.shape(16.dp))
-            .then(if (selected) Modifier.frame(2.dp, Palette.accent) else Modifier)
+            .then(if (selected) Modifier.frame(1.dp, Palette.accent) else Modifier)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = {

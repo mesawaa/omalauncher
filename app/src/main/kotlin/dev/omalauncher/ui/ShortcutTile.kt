@@ -98,7 +98,7 @@ internal fun Modifier.tileFrame(focused: Boolean) =
     when {
         !LauncherStyle.bareAppIcons -> tile(focused)
         // Bare icons still show which tile is focused or being edited.
-        focused -> frame(2.dp, Palette.accent)
+        focused -> frame(1.dp, Palette.accent)
         else -> this
     }
 

@@ -156,7 +156,7 @@ internal fun FolderPanel(
             Modifier
                 .offset { IntOffset(p.left, p.top) }
                 .size(with(density) { p.width.toDp() }, with(density) { p.height.toDp() })
-                .frame(2.dp, Palette.accent, Palette.background, radius = 20.dp),
+                .naviWindow(radius = 20.dp),
         )
         folder.apps.forEachIndexed { i, app ->
             if (app.key == carried) return@forEachIndexed

@@ -50,7 +50,7 @@ private fun DialogFrame(
         Column(
             Modifier
                 .fillMaxWidth()
-                .frame(2.dp, Palette.accent, Palette.surface, radius = 24.dp)
+                .naviWindow(Palette.surface, radius = 24.dp)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) { content() }

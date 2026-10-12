@@ -4,9 +4,17 @@ widget "terminal" {
   size: 6x4
   minSize: 2x2
   padding: 0
+  background: background
 
-  meta { owl: 2 }
-
-  // A real shell in the tile. Tap it to type; tap outside it or press Back to let go.
-  Terminal { }
+  // A real shell in a Navi window. Tap it to type; tap outside it or press Back to let go.
+  // The frame and title bar light up while it has the keyboard.
+  Column { fill: true; gap: 0; border: 1; borderColor: focused ? accent : border; radius: 0
+    Row { fill: width; height: 22; gap: 6; align: center; padding: [8, 0, 4, 0]; background: selection
+      Text { text: "NAVI :: TERMINAL"; font: mono; fontSize: 11; letterSpacing: 1; color: focused ? bright_foreground : foreground; weight: 1; maxLines: 1 }
+      Box { width: 14; height: 14; align: center; border: 1; borderColor: border; radius: 0
+        Text { text: "×"; font: mono; fontSize: 11; align: center }
+      }
+    }
+    Terminal { weight: 1; fill: width }
+  }
 }

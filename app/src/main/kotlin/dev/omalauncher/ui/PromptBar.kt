@@ -478,7 +478,7 @@ private fun AgentPicker(
                     Modifier
                         .width(IntrinsicSize.Max)
                         .widthIn(min = 200.dp)
-                        .frame(2.dp, Palette.accent, Palette.background)
+                        .naviWindow(radius = 16.dp)
                         .padding(4.dp),
                 ) {
                     for (a in store.installed) {

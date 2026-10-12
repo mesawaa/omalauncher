@@ -635,7 +635,7 @@ private fun DropPreview(
             .offset { IntOffset(r.left, r.top) }
             .size(with(density) { r.width.toDp() }, with(density) { r.height.toDp() })
             // Grouping fills more, so it reads as "into" rather than "in place of".
-            .frame(2.dp, Palette.accent, Palette.accent.copy(alpha = if (arrange.grouping) 0.35f else 0.12f)),
+            .frame(1.dp, Palette.accent, Palette.accent.copy(alpha = if (arrange.grouping) 0.35f else 0.12f)),
     )
 }
 

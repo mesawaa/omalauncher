@@ -25,7 +25,7 @@ import dev.omalauncher.widgets.newWidgetCommand
 internal fun EditBar(content: @Composable () -> Unit) {
     Row(
         Modifier
-            .frame(2.dp, Palette.accent, Palette.background)
+            .naviWindow(radius = 16.dp)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) { content() }
@@ -102,13 +102,16 @@ private fun Menu(
             .clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
+        // A Navi window, like the panels it opens.
         Column(
             Modifier
                 .widthIn(min = 240.dp, max = 360.dp)
-                .frame(2.dp, Palette.accent, Palette.background, radius = 20.dp)
-                .clickable(enabled = false) {}
-                .padding(8.dp),
-        ) { content() }
+                .naviWindow()
+                .clickable(enabled = false) {},
+        ) {
+            NaviBar("NAVI", onDismiss)
+            Column(Modifier.padding(8.dp)) { content() }
+        }
     }
 }
 

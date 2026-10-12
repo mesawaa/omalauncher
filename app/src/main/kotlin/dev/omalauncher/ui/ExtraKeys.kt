@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 /** One row's height, keycap and the gap around it; the bar is two rows, like Termux's default. */
 private val RowHeight = 40.dp
 private val KeyGap = 3.dp
-private val FrameWidth = 2.dp
+private val FrameWidth = 1.dp
 
 /** The gap between the bar and the keyboard, and to the screen's sides: the tiles' gap. */
 private val Gap = 6.dp
