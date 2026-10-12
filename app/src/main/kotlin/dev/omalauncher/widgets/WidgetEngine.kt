@@ -10,7 +10,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import dev.omalauncher.BuildConfig
 import dev.omalauncher.LauncherData
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.Agent
@@ -18,7 +17,6 @@ import dev.omalauncher.linux.Proot
 import dev.omalauncher.linux.pacmanInstall
 import dev.omalauncher.linux.runJob
 import dev.omalauncher.linux.shellQuote
-import dev.omalauncher.ui.Palette
 import dev.omalauncher.upgrade.Managed
 import dev.omalauncher.upgrade.Policy
 import dev.omalauncher.widgets.lang.CompileError
@@ -38,7 +36,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /** A widget file, compiled. [program] is null when it doesn't compile; [error] says why. */
@@ -95,7 +92,7 @@ class WidgetEngine(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val services = WidgetServices(context, proot, runtime, scope)
 
-    /** Opens launcher screens ("style" or "themes", "agents", "drawer"); set by the UI. */
+    /** Opens launcher screens ("style", "agents", "drawer"); set by the UI. */
     var launcherAction by services::launcherAction
 
     /** The widget store. */
@@ -333,11 +330,6 @@ class WidgetEngine(
                         event: Int,
                         path: String?,
                     ) {
-                        if (path != null && path.endsWith(".themes") && BuildConfig.DEBUG) {
-                            File(checkDir, path).delete()
-                            scope.launch { previewThemes(path.removeSuffix(".themes")) }
-                            return
-                        }
                         if (path == null || !path.endsWith(".want")) return
                         val want = File(checkDir, path)
                         val hash = runCatching { want.readText().trim() }.getOrNull()
@@ -515,35 +507,6 @@ class WidgetEngine(
         if (hashes[name] != hash) return
         val line = if (ok) "preview $hash ${cells.first}x${cells.second} ${w}x$h" else "preview-skipped $hash rendering failed"
         writeCheck(spec.file, hash, "ok", listOfNotNull(line, screen).joinToString("\n"))
-    }
-
-    /**
-     * Debug builds, for the widget store's per-theme previews (scripts/store-previews.sh): once
-     * [name]'s sources have loaded, renders its tile in every bundled Omarchy theme to
-     * .preview/themes/<theme>/<file>.png, then writes .preview/themes/<file>.done. Asked for by
-     * writing .check/<file>.themes. The whole launcher takes each theme's colors while it runs.
-     */
-    private suspend fun previewThemes(name: String) {
-        val spec = specs.firstOrNull { it.file.name == name } ?: return
-        val inst = instance(spec) ?: return
-        val cells = layout.cell(name)?.let { it.w to it.h } ?: spec.size?.let { (w, h) -> w.coerceIn(1, GRID_COLUMNS) to h.coerceAtLeast(1) } ?: (3 to 3)
-        val (w, h) = layout.tilePx(cells, context.resources.displayMetrics)
-        val themes = withContext(Dispatchers.IO) { runtime.themes.bundled }
-        val before = Palette.current
-        val dir = File(previewDir, "themes")
-        previewing += name
-        try {
-            val loaded: suspend () -> Unit = { snapshotFlow { inst.loaded() }.first { it } }
-            withTimeoutOrNull(30_000) { loaded() }
-            for (theme in themes) {
-                Palette.apply(theme.colors)
-                previews.render(spec, inst, cells, w, h, File(dir, "${theme.name}/$name.png"), loaded)
-            }
-        } finally {
-            Palette.restore(before)
-            previewing.remove(name)
-        }
-        withContext(Dispatchers.IO) { File(dir, "$name.done").writeText("${cells.first}x${cells.second} ${w}x$h\n") }
     }
 
     private fun isLive(spec: WidgetSpec): Boolean {

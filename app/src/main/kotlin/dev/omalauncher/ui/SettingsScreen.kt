@@ -53,7 +53,7 @@ fun SettingsScreen(
             }
         val rows =
             listOf(
-                Triple("style", runtime.themes.current?.title ?: "theme, background, home screen", onStyle),
+                Triple("style", "colors, font, home screen, terminal", onStyle),
                 Triple("linux", linuxStatus, onLinux),
                 if (installed) {
                     Triple("coding agents", runtime.agents.default?.let { "default: ${it.name}" } ?: "install Claude Code, OpenCode, …", onAgents)

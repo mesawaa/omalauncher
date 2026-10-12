@@ -42,9 +42,10 @@ internal fun WidgetTile(
     waitsForLinux: LinuxState? = null,
     onInstallLinux: () -> Unit = {},
 ) {
+    // No frame or focus outline from the launcher: the widget draws its own, or none.
     Box(
         modifier
-            .tile(focused)
+            .widgetTile(ownBackground = instance?.program?.background != null && waitsForLinux == null && needs.isEmpty())
             .pointerInput(spec) { detectTapGestures(onTap = { onTap() }) },
     ) {
         if (waitsForLinux != null) {
@@ -116,7 +117,7 @@ private fun TileButton(
     )
 }
 
-/** A widget's screen { }, full screen over home in an Omarchy window titled by its `title` or the widget's name. */
+/** A widget's screen { }, full screen over home in a Navi window titled by its `title` or the widget's name. */
 @Composable
 internal fun WidgetScreenPanel(
     spec: WidgetSpec,
@@ -124,7 +125,7 @@ internal fun WidgetScreenPanel(
     onDismiss: () -> Unit,
 ) {
     val title = instance.program.screenTitle?.let { instance.eval(it, instance.root, "title").text() } ?: spec.name
-    OverlayPanel(title, onDismiss) {
+    NaviPanel(title, onDismiss) {
         WidgetScreen(instance, Modifier.weight(1f).fillMaxWidth())
     }
 }

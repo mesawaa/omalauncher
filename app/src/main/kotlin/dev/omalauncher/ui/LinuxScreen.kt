@@ -138,7 +138,7 @@ private fun Installed(runtime: Runtime) {
             BasicText("remove linux?", style = Mono.copy(color = Palette.red))
             BasicText(
                 "Deletes Linux apps, coding agents, packages and everything in /root, like Downloads. " +
-                    "Themes, wallpapers, widgets and your home screen stay.",
+                    "Widgets and your home screen stay.",
                 style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
             )
             Row {

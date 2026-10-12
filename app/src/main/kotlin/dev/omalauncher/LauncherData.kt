@@ -19,18 +19,9 @@ import java.nio.file.attribute.BasicFileAttributes
 /**
  * The launcher's own data that Linux also sees. It lives outside the rootfs,
  * so it exists without Linux and survives installing or removing it; proot
- * binds it to the paths Omarchy and agents expect (see [dev.omalauncher.linux.Proot]).
+ * binds it to the paths agents expect (see [dev.omalauncher.linux.Proot]).
  */
 object LauncherData {
-    /** Omarchy's release: themes, wallpapers, templates. The guest sees ~/.local/share/omarchy. */
-    fun omarchyDir(context: Context) = File(context.filesDir, "omarchy")
-
-    /** The user's own Omarchy themes. The guest sees ~/.config/omarchy/themes, where omarchy-theme-install puts them. */
-    fun userThemesDir(context: Context) = File(context.filesDir, "themes")
-
-    /** The user's extra backgrounds, per theme. The guest sees ~/.config/omarchy/backgrounds. */
-    fun userBackgroundsDir(context: Context) = File(context.filesDir, "backgrounds")
-
     /** Widget files. The guest sees ~/.config/omalauncher/widgets. */
     fun widgetsDir(context: Context) = File(context.filesDir, "widgets")
 
@@ -38,7 +29,6 @@ object LauncherData {
     const val LAUNCHER_MANIFEST = "launcher-managed.json"
     const val GUEST_MANIFEST = "managed.json"
 
-    private const val OLD_OMARCHY = "arch/root/.local/share/omarchy"
     private const val OLD_WIDGETS = "arch/root/.config/omalauncher/widgets"
 
     /**
@@ -48,7 +38,6 @@ object LauncherData {
      */
     fun migrate(context: Context) {
         val files = context.filesDir
-        move(File(files, OLD_OMARCHY), omarchyDir(context))
         if (move(File(files, OLD_WIDGETS), widgetsDir(context))) moveManifestEntries(files)
     }
 

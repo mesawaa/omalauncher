@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.omalauncher.R
+import dev.omalauncher.style.Colors
+import dev.omalauncher.style.Copland
 
 /** `#rrggbb` or `#aarrggbb` as a color; null if it isn't one. */
 fun hexColor(hex: String?): Color? {
@@ -32,12 +34,14 @@ fun hexColor(hex: String?): Color? {
     }
 }
 
-/** A theme's colors, parsed once when it's applied rather than on every read. */
+/** The launcher's colors and font, parsed once when they change rather than on every read. */
 @Immutable
 class ThemePalette(
     colors: Map<String, String>,
+    /** The launcher's own text; see style.toml's `font`. */
+    val font: FontFamily = FontFamily.Monospace,
 ) {
-    /** Every color from the theme's colors.toml by name (accent, red, yellow, ...). */
+    /** Every color by name (accent, red, yellow, color0, ...), as widgets use them. */
     val named: Map<String, Color> = colors.mapNotNull { (k, v) -> hexColor(v)?.let { k to it } }.toMap()
 
     private fun color(
@@ -46,33 +50,35 @@ class ThemePalette(
     ) = named[key] ?: Color(fallback)
 
     val isLight = colors["mode"] == "light"
-    val background = color("background", 0xFF1A1B26)
-    val surface = color("lighter_background", 0xFF24283B)
+    val background = color("background", 0xFF050517)
+    val surface = color("lighter_background", 0xFF070B26)
     val overlay = background.copy(alpha = 0.9f)
-    val foreground = color("foreground", 0xFFC0CAF5)
-    val muted = color("dark_foreground", 0xFF565F89)
-    val accent = color("accent", 0xFF7AA2F7)
-    val border = color("muted", 0xFF414868)
-    val red = color("red", 0xFFF7768E)
-    val green = color("green", 0xFF9ECE6A)
-    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = TextSize.Body, color = foreground)
+    val foreground = color("foreground", 0xFFA8E4EA)
+    val muted = color("dark_foreground", 0xFF5A7FAE)
+    val accent = color("accent", 0xFF3FB8E0)
+    val border = color("muted", 0xFF246A96)
+
+    /** A Navi window's title bar. */
+    val bar = color("selection", 0xFF0D1F50)
+    val bright = color("bright_foreground", 0xFFE0FBFF)
+    val red = color("red", 0xFFD2738A)
+    val green = color("green", 0xFF5FD4B4)
+    val mono = TextStyle(fontFamily = font, fontSize = TextSize.Body, color = foreground)
 }
 
 /**
- * Launcher colors, driven by the active Omarchy theme. Until one is applied
- * they're the defaults above, which match Tokyo Night.
+ * Launcher colors: Copland OS ([Copland]), with whatever style.toml changes
+ * (see [dev.omalauncher.style.StyleStore]).
  */
 object Palette {
-    var current by mutableStateOf(ThemePalette(emptyMap()))
+    var current by mutableStateOf(ThemePalette(Colors.resolve(Copland.COLORS)))
         private set
 
-    fun apply(theme: Map<String, String>) {
-        current = ThemePalette(theme)
-    }
-
-    /** Puts back a palette taken from [current], after drawing in other colors for a while. */
-    fun restore(palette: ThemePalette) {
-        current = palette
+    fun apply(
+        colors: Map<String, String>,
+        font: FontFamily = current.font,
+    ) {
+        current = ThemePalette(colors, font)
     }
 
     fun named(name: String): Color? = current.named[name]
@@ -85,6 +91,8 @@ object Palette {
     val muted get() = current.muted
     val accent get() = current.accent
     val border get() = current.border
+    val bar get() = current.bar
+    val bright get() = current.bright
     val red get() = current.red
     val green get() = current.green
 
@@ -92,7 +100,7 @@ object Palette {
     val glass get() = background.copy(alpha = 0.88f)
 }
 
-/** How the launcher draws itself, independent of the theme's colors. Saved by ThemeStore. */
+/** How the launcher draws itself, independent of its colors. Saved by StyleStore. */
 object LauncherStyle {
     /** App icons as silhouettes in the accent color (Omarchy) rather than their own colors. */
     var monochromeIcons by mutableStateOf(false)
@@ -105,9 +113,6 @@ object LauncherStyle {
 
     /** How frames (tiles, panels, menus, fields) round their corners. */
     var corners by mutableStateOf(Corners.Edge)
-
-    /** Outlines around home's tiles and full-screen panels, like Omarchy's window borders; off leaves just their fill. */
-    var borders by mutableStateOf(true)
 
     /** The shape frames use: square, or [radius] scaled by the corner style. */
     fun shape(radius: Dp = 16.dp): Shape = if (corners == Corners.Edge) RectangleShape else RoundedCornerShape(radius * corners.scale)
@@ -146,9 +151,6 @@ fun Modifier.frame(
     return if (width > 0.dp) filled.border(width, color, shape) else filled
 }
 
-/** A frame's outline width: [width], or none when the user hid borders. */
-fun frameWidth(width: Dp = 2.dp): Dp = if (LauncherStyle.borders) width else 0.dp
-
 /**
  * Omarchy's gap between framed surfaces: between home's tiles, from them to the screen's
  * safe edges, and from full-screen panels to those edges, so a panel's frame lines up with the tiles'.
@@ -159,13 +161,22 @@ val HomeGap = 6.dp
 val ReadingWidth = 640.dp
 
 /**
- * A home-screen surface over the wallpaper: tiles, the prompt bar, the rails; accent while [focused].
- * With borders hidden only the focused one is outlined, so it's still clear which has the keyboard.
+ * One of the launcher's own surfaces over the wallpaper (the prompt bar, the rails, boxed app tiles):
+ * a Navi window's thin frame, in the accent while [focused]. Widget tiles aren't drawn with it: a
+ * widget draws its own frame, or none (see [widgetTile]).
  */
-fun Modifier.tile(focused: Boolean = false): Modifier =
-    if (focused) frame(2.dp, Palette.accent, Palette.glass) else frame(frameWidth(), Palette.border, Palette.glass)
+fun Modifier.tile(focused: Boolean = false): Modifier = frame(1.dp, if (focused) Palette.accent else Palette.border, Palette.glass)
 
-/** The launcher's text style in the theme's foreground color. */
+/**
+ * A widget's tile: clipped to the corner style and nothing else drawn around it. Without a
+ * `background` of its own the widget gets the launcher's glass fill, so its text stays readable.
+ */
+fun Modifier.widgetTile(ownBackground: Boolean): Modifier {
+    val shape = LauncherStyle.shape()
+    return clip(shape).then(if (ownBackground) Modifier else Modifier.background(Palette.glass, shape))
+}
+
+/** The launcher's text style: its font (style.toml's `font`), in the foreground color. */
 val Mono get() = Palette.current.mono
 
 /**
@@ -214,7 +225,7 @@ object Glyph {
     const val ChevronUp = "\uDB80\uDD43"
 }
 
-/** Status/navigation bar icons follow the theme's light or dark mode. */
+/** Status/navigation bar icons follow the palette's light or dark mode. */
 fun applySystemBars(
     activity: androidx.activity.ComponentActivity,
     light: Boolean,

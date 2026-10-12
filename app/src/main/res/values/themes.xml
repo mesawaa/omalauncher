@@ -7,6 +7,6 @@
     </style>
 
     <style name="Theme.Omalauncher.Window" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF1A1B26</item>
+        <item name="android:windowBackground">#FF050517</item>
     </style>
 </resources>

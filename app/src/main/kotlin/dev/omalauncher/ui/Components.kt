@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
@@ -24,14 +26,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.omalauncher.linux.JobState
 
 /**
- * A full-screen framed panel with a title, optional [actions] and a close button: themes, agents, the store.
- * With a [contentWidth], a wide screen centers the content at that width; the frame and title still span the panel.
+ * A full-screen launcher panel as a Navi window: settings, agents, the store. Its title is set in capitals
+ * on the window's title bar, with optional [actions] and the close box. With a [contentWidth], a wide
+ * screen centers the content at that width; the frame and title bar still span the panel.
  */
 @Composable
 fun OverlayPanel(
@@ -40,7 +46,32 @@ fun OverlayPanel(
     actions: @Composable RowScope.() -> Unit = {},
     contentWidth: Dp = Dp.Unspecified,
     content: @Composable ColumnScope.() -> Unit,
+) = NaviPanel(title.uppercase(), onDismiss, actions, contentWidth, content = content)
+
+/**
+ * A full-screen Navi window over home, titled [title] as given. Without [chrome] there's no window
+ * at all: [content] fills the screen on the background color, and Back or Home closes it.
+ */
+@Composable
+fun NaviPanel(
+    title: String,
+    onDismiss: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {},
+    contentWidth: Dp = Dp.Unspecified,
+    chrome: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (!chrome) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(Palette.background)
+                .pointerInput(Unit) { detectTapGestures { } }
+                .safeDrawingPadding(),
+            content = content,
+        )
+        return
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -52,28 +83,62 @@ fun OverlayPanel(
         Column(
             Modifier
                 .fillMaxSize()
-                .frame(frameWidth(), Palette.accent, Palette.background, radius = 20.dp)
+                .naviWindow()
                 // Taps inside the panel don't reach the scrim behind it.
-                .pointerInput(Unit) { detectTapGestures { } }
-                .padding(PanelPadding),
+                .pointerInput(Unit) { detectTapGestures { } },
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BasicText(title, style = Mono.copy(color = Palette.accent, fontSize = TextSize.Title))
-                Spacer(Modifier.weight(1f))
-                actions()
-                Symbol(Glyph.Close, Palette.red, Modifier.clickable(onClick = onDismiss).padding(8.dp), TextSize.Title)
-            }
-            Spacer(Modifier.height(8.dp))
-            if (contentWidth == Dp.Unspecified) {
-                content()
-            } else {
-                Column(Modifier.weight(1f).widthIn(max = contentWidth).fillMaxWidth().align(Alignment.CenterHorizontally), content = content)
+            NaviBar(title, onDismiss, actions)
+            Column(Modifier.weight(1f).fillMaxWidth().padding(PanelPadding)) {
+                if (contentWidth == Dp.Unspecified) {
+                    content()
+                } else {
+                    Column(Modifier.weight(1f).widthIn(max = contentWidth).fillMaxWidth().align(Alignment.CenterHorizontally), content = content)
+                }
             }
         }
     }
 }
 
-/** [OverlayPanel]'s padding inside its frame; rows that scroll sideways [bleed] through it to the frame. */
+/** A Navi window: [fill] inside a thin frame in the border color, in the corner style. */
+fun Modifier.naviWindow(
+    fill: Color = Palette.background,
+    radius: Dp = 20.dp,
+): Modifier = frame(1.dp, Palette.border, fill, radius)
+
+/** A Navi window's title bar: [title] in mono on the bar color, [actions], then the close box if [onClose] is given. */
+@Composable
+fun NaviBar(
+    title: String,
+    onClose: (() -> Unit)?,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 34.dp).background(Palette.bar).padding(start = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(
+            title,
+            Modifier.weight(1f).padding(vertical = 6.dp),
+            style = Mono.copy(color = Palette.foreground, letterSpacing = 1.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        actions()
+        if (onClose != null) CloseBox(onClose)
+    }
+}
+
+/** Navi's close box: a framed × at a title bar's right end, with room around it for a thumb. */
+@Composable
+fun CloseBox(onClose: () -> Unit) {
+    Box(Modifier.clickable(onClick = onClose).padding(horizontal = 8.dp, vertical = 6.dp)) {
+        Box(Modifier.size(20.dp).frame(1.dp, Palette.border, radius = 0.dp), contentAlignment = Alignment.Center) {
+            BasicText("×", style = Mono.copy(color = Palette.foreground, fontSize = 15.sp, fontFamily = FontFamily.Monospace))
+        }
+    }
+}
+
+/** [OverlayPanel]'s padding inside its frame, under the title bar; rows that scroll sideways [bleed] through it to the frame. */
 val PanelPadding = 12.dp
 
 /** Widens the element by [gutter] on both sides, drawing over its parent's padding. */

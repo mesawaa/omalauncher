@@ -83,7 +83,7 @@ class WidgetServices(
     private val notifications = Notifications(context, media)
     private val volume = Volume(context)
 
-    /** Opens launcher screens ("style" or "themes", "agents", "drawer"); set by the UI. */
+    /** Opens launcher screens ("style", "agents", "drawer"); set by the UI. */
     var launcherAction: ((String) -> Unit)? = null
 
     private val recent = HashMap<String, Pair<Long, Deferred<ShellResult>>>()
@@ -216,7 +216,7 @@ class WidgetServices(
                 "locale" to Str(java.util.Locale.getDefault().toLanguageTag()),
                 "timezone" to Str(java.util.TimeZone.getDefault().id),
                 "launcher" to Str(BuildConfig.VERSION_NAME),
-                "theme" to (runtime.themes.current?.title?.let(::Str) ?: Null),
+                "theme" to Str("Copland OS"),
                 "apps" to num(runtime.androidApps.apps.size.toLong()),
             ),
         )

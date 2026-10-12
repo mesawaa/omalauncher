@@ -171,7 +171,6 @@ class Bootstrap(
             Step("packages-1", Stage.Packages, "Installing packages", network = true) { guest(pacmanInstall(PACKAGES, refresh = true)) },
             Step("keymap-1", Stage.Packages, "Compiling keymap", network = false, isDone = { proot.keymap.exists() }) { compileKeymap() },
             Step("cliamp-$CLIAMP_VERSION", Stage.Packages, "Installing cliamp", network = true) { installCliamp() },
-            // Omarchy's themes were a step here ("omarchy-<ref>") until Linux became optional; ThemeStore fetches them now.
         )
 
     private fun Step.done() = isDone?.invoke() ?: (id in journal)
@@ -240,7 +239,7 @@ class Bootstrap(
 
     /**
      * Deletes the rootfs and what we recorded about it. Callers stop guest
-     * processes first. Launcher data (themes, widgets) lives outside it and stays.
+     * processes first. Launcher data (widgets) lives outside it and stays.
      */
     suspend fun remove() =
         withContext(Dispatchers.IO) {

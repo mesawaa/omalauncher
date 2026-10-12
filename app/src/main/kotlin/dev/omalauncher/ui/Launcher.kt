@@ -5,7 +5,6 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +34,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import dev.omalauncher.Runtime
 import dev.omalauncher.widgets.checkSecretsCommand
@@ -52,12 +48,11 @@ fun LauncherRoot(
 ) {
     state.bindScope()
     val ready = runtime.launcherReady
-    // With our live wallpaper active the window is transparent and Android draws the wallpaper behind it.
-    val showOwnBackground = !ready || !runtime.themes.liveWallpaperActive
+    // Home is transparent: Android draws the wallpaper behind the window, as for stock launchers.
     Box(
         Modifier
             .fillMaxSize()
-            .then(if (showOwnBackground) Modifier.background(Palette.background) else Modifier),
+            .then(if (ready) Modifier else Modifier.background(Palette.background)),
     ) {
         if (ready) DesktopScreen(runtime, state) else SetupScreen(runtime)
     }
@@ -86,7 +81,6 @@ private fun DesktopScreen(
             state.licensesOpen -> state.licensesOpen = false
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
-            state.themeBrowserOpen -> state.themeBrowserOpen = false
             state.styleOpen -> state.styleOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.settingsOpen -> state.settingsOpen = false
@@ -95,21 +89,6 @@ private fun DesktopScreen(
         }
     }
 
-    if (!runtime.themes.liveWallpaperActive) {
-        runtime.themes.wallpaper?.let { bmp ->
-            // Read while drawing, so swiping pages only redraws this.
-            Canvas(Modifier.fillMaxSize()) {
-                val src = wallpaperCrop(bmp.width, bmp.height, size.width.toInt(), size.height.toInt(), state.wallpaperOffset)
-                drawImage(
-                    bmp,
-                    srcOffset = IntOffset(src.left, src.top),
-                    srcSize = IntSize(src.width(), src.height()),
-                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                    filterQuality = FilterQuality.Medium,
-                )
-            }
-        }
-    }
     val covered = remember(state) { { state.homeCovered || runtime.widgets.openScreen != null } }
     CompositionLocalProvider(LocalHomeCovered provides covered) {
         Column(Modifier.fillMaxSize().safePadding()) {
@@ -217,11 +196,11 @@ private fun DesktopScreen(
     }
 
     // Full-screen panels draw over the bar.
-    ThemesOverlay(runtime, state)
+    Overlays(runtime, state)
 }
 
 @Composable
-private fun ThemesOverlay(
+private fun Overlays(
     runtime: Runtime,
     state: LauncherState,
 ) {
@@ -241,9 +220,8 @@ private fun ThemesOverlay(
         )
     }
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
-    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
-    if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
-    if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
+    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false })
+    if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, null, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })
     state.shared?.let { link ->

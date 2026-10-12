@@ -40,13 +40,7 @@ class Proot(
     private val bwrapShim = File(filesDir, "bwrap-shim")
 
     /** Launcher data the guest sees in its home, kept outside the rootfs; see [LauncherData]. */
-    private val dataBinds =
-        listOf(
-            "$GUEST_HOME/.local/share/omarchy" to LauncherData.omarchyDir(context),
-            "$GUEST_HOME/.config/omalauncher/widgets" to LauncherData.widgetsDir(context),
-            "$GUEST_HOME/.config/omarchy/themes" to LauncherData.userThemesDir(context),
-            "$GUEST_HOME/.config/omarchy/backgrounds" to LauncherData.userBackgroundsDir(context),
-        )
+    private val dataBinds = listOf("$GUEST_HOME/.config/omalauncher/widgets" to LauncherData.widgetsDir(context))
 
     /**
      * Android's Chinese, Japanese and Korean font, which the guest has none of (Arch's is ~300 MB).

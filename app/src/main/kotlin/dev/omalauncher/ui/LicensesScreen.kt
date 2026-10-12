@@ -75,13 +75,6 @@ private val COMPONENTS =
             "https://github.com/termux/libandroid-shmem",
             source = "https://github.com/termux/libandroid-shmem/tree/v0.7",
         ),
-        Component(
-            "Omarchy",
-            "theme colors bundled for first run",
-            "mit",
-            "Copyright (c) David Heinemeier Hansson",
-            "https://github.com/omacom/omarchy",
-        ),
         Component("Nerd Fonts", "symbol font", "mit", "Copyright (c) 2014 Ryan L McIntyre", "https://www.nerdfonts.com"),
         Component(
             "Weather Icons",

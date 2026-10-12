@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,9 +19,6 @@ import kotlinx.coroutines.Dispatchers
 class LauncherState {
     val drawer = Animatable(0f)
     var styleOpen by mutableStateOf(false)
-
-    /** The community themes, from the home menu's theme strip or over the style screen. */
-    var themeBrowserOpen by mutableStateOf(false)
     var agentsOpen by mutableStateOf(false)
     var storeOpen by mutableStateOf(false)
     var settingsOpen by mutableStateOf(false)
@@ -43,12 +39,11 @@ class LauncherState {
 
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
-        get() = drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null || sharing != null
+        get() = drawer.value > 0.99f || settingsOpen || styleOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null || sharing != null
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
         styleOpen = false
-        themeBrowserOpen = false
         agentsOpen = false
         storeOpen = false
         packagesOpen = false
@@ -62,9 +57,6 @@ class LauncherState {
 
     /** Key of the home tile in edit mode (handles and action bar shown), if any. */
     var editing by mutableStateOf<String?>(null)
-
-    /** How far the home pages are scrolled, 0 (first) to 1 (last); the background slides along. */
-    var wallpaperOffset by mutableFloatStateOf(0.5f)
 
     /**
      * The bar's height in px with its gaps above and below, as last laid out over home (0 until then). A large

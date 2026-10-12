@@ -5,7 +5,6 @@
     <files-path name="guest" path="arch/" />
     <files-path name="tmp" path="tmp/" />
     <files-path name="xdg" path="xdg/" />
-    <files-path name="omarchy" path="omarchy/" />
     <files-path name="widgets" path="widgets/" />
     <!-- QR codes of widgets, for sharing as an image. -->
     <cache-path name="share" path="share/" />

@@ -36,7 +36,7 @@ import dev.omalauncher.linux.matches
 import dev.omalauncher.linux.resolveLinuxIcon
 import dev.omalauncher.linux.run
 import dev.omalauncher.linux.shellQuote
-import dev.omalauncher.theme.ThemeStore
+import dev.omalauncher.style.StyleStore
 import dev.omalauncher.ui.KeyboardBridge
 import dev.omalauncher.ui.TerminalTiles
 import dev.omalauncher.ui.WindowManager
@@ -60,7 +60,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
 /**
- * Process-wide state: the launcher (themes, widgets, Android apps) and the
+ * Process-wide state: the launcher (its style, widgets, Android apps) and the
  * optional Linux system (the rootfs, the Wayland server, the window manager).
  */
 class Runtime(
@@ -81,7 +81,7 @@ class Runtime(
     val linuxMasks = mutableStateMapOf<String, ImageBitmap>()
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
-    val themes = ThemeStore(context, proot, isLinux = { linux }, onConfigChanged = ::syncGuest)
+    val style = StyleStore(context, proot, isLinux = { linux })
     private val audio = AudioBridge(proot)
     private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles)
     val agents = AgentStore(proot, onChanged = ::syncGuest)
@@ -104,7 +104,7 @@ class Runtime(
                 openBridge::managed,
                 pacman::managed,
                 agents::managed,
-                themes::managed,
+                style::managed,
                 widgets::guestManaged,
             ),
         )
@@ -137,7 +137,7 @@ class Runtime(
     init {
         // Saved, so removing Linux later doesn't bring the first-run screen back.
         if (launcherReady) prefs.edit().putBoolean(SETUP_DONE, true).apply()
-        themes.loadStyle()
+        style.loadOptions()
         androidApps.start()
         // Omarchy's Super bindings inside Linux windows; the home screen handles its own (see MainActivity).
         keyboard.onShortcut = { code ->
@@ -179,22 +179,20 @@ class Runtime(
         scope.launch {
             withContext(Dispatchers.IO) {
                 LauncherData.migrate(context)
+                style.removeOmarchy()
                 launcherFiles.sync()
                 agents.load()
             }
-            themes.load()
+            style.start(scope)
             widgets.start()
-            // On the first-run screen the download is the screen's job, with progress.
-            if (launcherReady) scope.launch { themes.ensureRelease() }
             if (bootstrap.wanted) runLinux { bootstrap.run() } else bootstrap.run()
         }
     }
 
-    /** The first-run screen is done; the home screen shows from now on, while the rest of the themes download. */
+    /** The first-run screen is done; the home screen shows from now on. */
     fun finishWelcome() {
         prefs.edit().putBoolean(SETUP_DONE, true).apply()
         launcherReady = true
-        scope.launch { themes.ensureRelease() }
     }
 
     /** Installs Linux in the background, with [agents]; progress shows in [Bootstrap.state] and the notification. */
@@ -221,8 +219,8 @@ class Runtime(
     }
 
     /**
-     * Deletes Linux: its apps, agents, packages and home. Themes, widgets and
-     * the home screen stay; widgets that need Linux turn back into placeholders.
+     * Deletes Linux: its apps, agents, packages and home (style.toml with it). Widgets
+     * and the home screen stay; widgets that need Linux turn back into placeholders.
      */
     fun removeLinux() {
         if (!bootstrap.isInstalled || linuxJob?.isActive == true) return
@@ -252,7 +250,7 @@ class Runtime(
         if (on) runCatching { context.startForegroundService(intent) }.onFailure { Log.w(TAG, "cannot start the service", it) } else context.stopService(intent)
     }
 
-    /** Guest configs follow the theme and the installed agents; only while there is a guest. */
+    /** Guest configs follow the installed agents; only while there is a guest. */
     private fun syncGuest() {
         if (linux) provisioner.sync()
     }
@@ -286,14 +284,16 @@ class Runtime(
         linux = true
         // The recent apps strip on home lists Linux apps before the app list is ever opened.
         scope.launch { refreshApps() }
-        // Themes picked without Linux are written into the guest now.
-        themes.renderGuest()
         withContext(Dispatchers.IO) {
+            // Themes and backgrounds of their own that waited for Linux move into its home now.
+            style.removeOmarchy()
             provisioner.sync()
             audio.start()
             synchronized(server) { server.input.setKeymap(proot.keymap.path) }
             agents.load()
         }
+        // Terminals get the launcher's colors.
+        style.linuxReady()
         widgets.linuxChanged(true)
         refreshApps()
         withContext(Dispatchers.IO) { updates.load() }

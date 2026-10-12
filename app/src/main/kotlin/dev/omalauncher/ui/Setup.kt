@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,9 +19,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -38,46 +34,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.omalauncher.linux.AGENTS
 import dev.omalauncher.linux.Agent
-import androidx.compose.runtime.rememberCoroutineScope
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.linux.Stage
-import dev.omalauncher.theme.BundledTheme
-import dev.omalauncher.theme.ThemeStore
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
- * The first-run screen: pick a theme and, optionally, set up Linux. Start
- * fetches Omarchy's themes, then the home screen opens; a Linux install
- * carries on in the background.
+ * The first-run screen, Copland OS's boot: optionally set up Linux, then the
+ * home screen opens; a Linux install carries on in the background.
  */
 @Composable
 internal fun SetupScreen(runtime: Runtime) {
-    val themes = runtime.themes
-    var linux by rememberSaveable { mutableStateOf(false) }
-    // Claude Code first, like Omarchy's default agent; the first picked becomes the launcher's default.
+    var linux by rememberSaveable { mutableStateOf(true) }
+    // Claude Code first; the first picked becomes the launcher's default.
     var picked by rememberSaveable { mutableStateOf(listOf(AGENTS.first().bin)) }
-    var started by remember { mutableStateOf(false) }
     val install = rememberLinuxInstall(runtime)
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    // Only the picked theme now; the rest download in the background once home is up.
-    fun fetchTheme() {
-        error = null
-        scope.launch {
-            error = themes.fetchPicked()
-            if (error == null) runtime.finishWelcome()
-        }
-    }
     Column(Modifier.fillMaxSize().safeDrawingPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -87,43 +67,41 @@ internal fun SetupScreen(runtime: Runtime) {
                 Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = Gutter, vertical = 32.dp),
             ) {
                 Wordmark()
-                if (started) {
-                    ThemeDownloadProgress(themes.choices.firstOrNull { it.name == themes.picked }?.title?.lowercase() ?: themes.picked, error, onRetry = ::fetchTheme, onSkip = runtime::finishWelcome)
-                } else {
-                    Welcome(themes, linux, { linux = !linux }, picked) { bin -> picked = if (bin in picked) picked - bin else picked + bin }
-                }
+                Welcome(linux, { linux = !linux }, picked) { bin -> picked = if (bin in picked) picked - bin else picked + bin }
             }
         }
         // The start button stays in reach while the agent list scrolls.
-        if (!started) {
-            Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(start = Gutter, end = Gutter, top = 12.dp, bottom = 16.dp)) {
-                Appear(3) {
-                    StartButton(linux) {
-                        started = true
-                        if (linux) install(picked)
-                        fetchTheme()
-                    }
+        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(start = Gutter, end = Gutter, top = 12.dp, bottom = 16.dp)) {
+            Appear(3) {
+                StartButton(linux) {
+                    if (linux) install(picked)
+                    runtime.finishWelcome()
                 }
             }
         }
     }
 }
 
-/** The theme's colors as a strip of blocks, like fastfetch's palette, over the name. */
+/** Copland OS's boot screen title: the name in serif italic over Tachibana Lab's line, between frame rules. */
 @Composable
 private fun Wordmark() {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (name in listOf("red", "yellow", "green", "cyan", "blue", "magenta")) {
-            Box(Modifier.size(width = 22.dp, height = 8.dp).background(Palette.named(name) ?: Palette.accent))
-        }
-    }
-    Spacer(Modifier.height(20.dp))
-    BasicText("◆ omalauncher", style = Mono.copy(color = Palette.accent, fontSize = 28.sp, fontWeight = FontWeight.Bold))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
+    Spacer(Modifier.height(18.dp))
+    BasicText(
+        "Copland OS Enterprise",
+        style = Mono.copy(color = Palette.foreground, fontSize = 30.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic),
+    )
+    BasicText(
+        "Product by Tachibana Lab",
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, textAlign = TextAlign.End),
+    )
+    Spacer(Modifier.height(18.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
 }
 
 @Composable
 private fun Welcome(
-    themes: ThemeStore,
     linux: Boolean,
     onToggleLinux: () -> Unit,
     picked: List<String>,
@@ -132,23 +110,14 @@ private fun Welcome(
     Appear(0) {
         Column {
             Spacer(Modifier.height(10.dp))
-            BasicText("omarchy on your home screen", style = Mono.copy(fontSize = TextSize.Large))
+            BasicText("present day, present time", style = Mono.copy(fontSize = TextSize.Large))
             Spacer(Modifier.height(10.dp))
             BasicText(
-                "Omarchy's themes and wallpapers, your Android apps, and home-screen widgets. Arch Linux adds " +
-                    "terminal apps and coding agents, now or later in settings.",
+                "Your Android apps and home-screen widgets on your own wallpaper. Arch Linux adds terminal apps " +
+                    "and coding agents that build widgets for you, now or later in settings.",
                 style = Mono.copy(color = Subtle, lineHeight = 20.sp),
             )
         }
-    }
-    Spacer(Modifier.height(32.dp))
-    // Each theme starts downloading as it's selected, the default one right away.
-    LaunchedEffect(Unit) { themes.prefetch(themes.picked) }
-    Appear(1) {
-        ThemeStrip(themes, onPick = {
-            themes.pick(it)
-            themes.prefetch(it.name)
-        })
     }
     Spacer(Modifier.height(32.dp))
     Appear(2) {
@@ -195,45 +164,9 @@ private fun StartButton(
                 "Linux downloads about 1 GB, so Wi-Fi is best. It installs in the background in 10 to 20 minutes; " +
                     "the home screen is ready right away."
             } else {
-                "Downloads the theme's wallpaper now and Omarchy's other themes (about 70 MB) in the background."
+                "Linux can be set up any time later, from settings."
             },
             Modifier.padding(top = 10.dp).fillMaxWidth(),
-            style = Mono.copy(color = Subtle, fontSize = TextSize.Small, lineHeight = 16.sp),
-        )
-    }
-}
-
-/** After start: the picked theme's wallpaper downloading, or what to do when it failed. */
-@Composable
-private fun ThemeDownloadProgress(
-    theme: String,
-    error: String?,
-    onRetry: () -> Unit,
-    onSkip: () -> Unit,
-) {
-    Spacer(Modifier.height(10.dp))
-    BasicText(
-        if (error != null) "the theme didn't download" else "getting $theme",
-        style = Mono.copy(fontSize = TextSize.Large, color = if (error != null) Palette.red else Palette.foreground),
-    )
-    Spacer(Modifier.height(28.dp))
-    StageRow(
-        label = "download its wallpaper",
-        status = if (error != null) StageStatus.Failed else StageStatus.Running,
-        detail = error,
-        progress = null,
-    )
-    if (error != null) {
-        Spacer(Modifier.height(28.dp))
-        PrimaryButton("try again", onRetry)
-        BasicText(
-            "continue without wallpapers",
-            Modifier.padding(top = 16.dp).clickable(onClick = onSkip),
-            style = Mono.copy(color = Palette.accent, fontSize = TextSize.Body),
-        )
-        BasicText(
-            "The theme's colors apply anyway. The launcher tries again later, or download them in settings › style.",
-            Modifier.padding(top = 6.dp),
             style = Mono.copy(color = Subtle, fontSize = TextSize.Small, lineHeight = 16.sp),
         )
     }
@@ -434,90 +367,6 @@ private fun LogTail(
     }
 }
 
-/**
- * Omarchy's themes as swatches in a horizontal row; tapping one recolors everything right away.
- * [gutter] is the parent's side padding, which the row scrolls under. By default a pick only
- * recolors, for setup where the full themes aren't downloaded yet. With [onBrowse], the row
- * ends in a tile that opens the community themes.
- */
-@Composable
-internal fun ThemeStrip(
-    themes: ThemeStore,
-    gutter: Dp = Gutter,
-    onPick: (BundledTheme) -> Unit = themes::pick,
-    onBrowse: (() -> Unit)? = null,
-) {
-    RescanThemes(themes)
-    val list = themes.choices
-    if (list.isEmpty()) return
-    Column {
-        Row {
-            Label("theme")
-            Spacer(Modifier.weight(1f))
-            BasicText(
-                list.firstOrNull { it.name == themes.picked }?.title?.lowercase().orEmpty(),
-                style = Mono.copy(color = Subtle, fontSize = TextSize.Small),
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        val start = list.indexOfFirst { it.name == themes.picked }.coerceAtLeast(0)
-        LazyRow(
-            // Scrolls under the gutters to the screen edges, starting aligned with the text above.
-            Modifier.bleed(gutter),
-            state = rememberLazyListState(initialFirstVisibleItemIndex = start),
-            contentPadding = PaddingValues(horizontal = gutter),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(list, key = { it.name }) { theme -> ThemeSwatch(theme, theme.name == themes.picked) { onPick(theme) } }
-            if (onBrowse != null) item(key = "browse") { BrowseSwatch(onBrowse) }
-        }
-    }
-}
-
-/** A theme drawn in its own colors: its background, name and a row of its accents. */
-@Composable
-private fun ThemeSwatch(
-    theme: BundledTheme,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    fun color(key: String) = hexColor(theme.colors[key]) ?: Color.Gray
-    val border by animateColorAsState(if (selected) Palette.accent else Palette.border, label = "swatch")
-    Column(
-        Modifier
-            .width(112.dp)
-            .frame(if (selected) 2.dp else 1.dp, border, color("background"), radius = 12.dp)
-            .clickable(onClick = onClick)
-            .padding(10.dp),
-    ) {
-        BasicText(theme.title.lowercase(), style = Mono.copy(color = color("foreground"), fontSize = TextSize.Small), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            for (key in listOf("accent", "red", "yellow", "green", "magenta")) {
-                Box(Modifier.size(width = 14.dp, height = 6.dp).background(color(key)))
-            }
-        }
-    }
-}
-
-/** The strip's last tile, shaped like a [ThemeSwatch]: opens the community themes. */
-@Composable
-private fun BrowseSwatch(onClick: () -> Unit) {
-    Column(
-        Modifier
-            .width(112.dp)
-            .frame(1.dp, Palette.border, Palette.surface, radius = 12.dp)
-            .clickable(onClick = onClick)
-            .padding(10.dp),
-    ) {
-        BasicText("more themes ›", style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            repeat(5) { Box(Modifier.size(width = 14.dp, height = 6.dp).background(Palette.border)) }
-        }
-    }
-}
-
 @Composable
 internal fun Label(text: String) {
     BasicText(text.uppercase(), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small, letterSpacing = 1.5.sp))
@@ -542,10 +391,7 @@ private fun Appear(
     ) { content() }
 }
 
-/**
- * Secondary text on these screens. Some themes' dim colors match their surfaces
- * (white's dark_foreground is its lighter_background), so fade the foreground instead.
- */
+/** Secondary text on these screens: the foreground faded, so it reads on any colors style.toml sets. */
 private val Subtle get() = Palette.foreground.copy(alpha = 0.6f)
 
 /** Side padding of the setup screens. */

@@ -4,7 +4,6 @@ import android.app.ActivityManager
 import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -56,20 +55,10 @@ class MainActivity : ComponentActivity() {
         startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_HOME), 1)
     }
 
-    /**
-     * Debug builds: `adb shell am start -n dev.omalauncher/.MainActivity --es exec foot`,
-     * or `--es theme kanagawa` to apply a theme (scripts/collage-captures.sh).
-     */
+    /** Debug builds: `adb shell am start -n dev.omalauncher.nothing/dev.omalauncher.MainActivity --es exec foot`. */
     private fun handleDebugExec(intent: Intent) {
         if (!BuildConfig.DEBUG) return
         intent.getStringExtra("exec")?.let(runtime::launch)
-        intent.getStringExtra("theme")?.let { name ->
-            lifecycleScope.launch {
-                snapshotFlow { runtime.themes.loaded }.first { it }
-                runtime.themes.themes.firstOrNull { it.name == name }?.let { runtime.themes.apply(it) }
-                    ?: Log.w("debug", "no theme $name")
-            }
-        }
     }
 
     /**
@@ -90,8 +79,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         runtime.wm.focus(null)
         removeStaleWindowTasks()
-        // The user may have set or replaced the wallpaper while we were in the background.
-        lifecycleScope.launch { runtime.themes.refreshLiveWallpaper() }
     }
 
     /** Drops Recents cards whose Linux window no longer exists (app exited or process restarted). */

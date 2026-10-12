@@ -89,7 +89,7 @@ fun HomeScreen(
         engine.launcherAction = { action ->
             when (action) {
                 // "themes" from before the screen was style; widgets still send it.
-                "style", "themes" -> state.styleOpen = true
+                "style" -> state.styleOpen = true
                 "agents" -> state.agentsOpen = true
                 "store" -> state.storeOpen = true
                 "linux" -> state.linuxOpen = true
@@ -110,22 +110,17 @@ fun HomeScreen(
         state.currentPage = pageNumbers.getOrElse(pager.currentPage * per) { 1 }
         engine.activePage = state.currentPage
     }
-    // The background slides with the pages, like stock launchers. Our live wallpaper gets it through Android.
+    // The Android wallpaper slides with the pages, like stock launchers.
     val view = LocalView.current
     LaunchedEffect(pager, view) {
         val wallpapers = WallpaperManager.getInstance(view.context)
         snapshotFlow {
             val last = pager.pageCount - 1
-            val offset = if (last <= 0) 0.5f else ((pager.currentPage + pager.currentPageOffsetFraction) / last).coerceIn(0f, 1f)
-            // Also resent when our live wallpaper is picked, which starts out centered.
-            offset to runtime.themes.liveWallpaperActive
-        }.collect { (offset, live) ->
-            state.wallpaperOffset = offset
-            if (live) {
-                view.windowToken?.let {
-                    wallpapers.setWallpaperOffsetSteps(if (pager.pageCount > 1) 1f / (pager.pageCount - 1) else 1f, 1f)
-                    wallpapers.setWallpaperOffsets(it, offset, 0.5f)
-                }
+            if (last <= 0) 0.5f else ((pager.currentPage + pager.currentPageOffsetFraction) / last).coerceIn(0f, 1f)
+        }.collect { offset ->
+            view.windowToken?.let {
+                wallpapers.setWallpaperOffsetSteps(if (pager.pageCount > 1) 1f / (pager.pageCount - 1) else 1f, 1f)
+                wallpapers.setWallpaperOffsets(it, offset, 0.5f)
             }
         }
     }
