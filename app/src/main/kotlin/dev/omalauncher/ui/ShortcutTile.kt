@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -68,7 +69,7 @@ fun ShortcutTile(
                 // Bare silhouettes and initials sit on a badge, as in the drawer, so they read on any wallpaper.
                 bare && (mono || bmp == null) ->
                     Box(
-                        Modifier.size(iconSize).clip(LauncherStyle.shape(iconSize / 2)).background(Palette.surface),
+                        Modifier.size(iconSize).clip(CircleShape).background(Palette.bar),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (bmp != null) {

@@ -5,8 +5,13 @@ import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.os.Build
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
 import kotlinx.coroutines.flow.first
@@ -25,10 +30,21 @@ class MainActivity : ComponentActivity() {
     private val runtime get() = (application as App).runtime
     private val state = LauncherState()
 
+    /** An Android widget being added: its id, what it is and the page it goes on, until bound and configured. */
+    private var pendingWidget: Triple<Int, AppWidgetProviderInfo, Int>? = null
+
+    /** Android asks the user once whether the launcher may add an app's widgets. */
+    private val bindWidget =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val (id, info) = pendingWidget ?: return@registerForActivityResult
+            if (result.resultCode == RESULT_OK) configureWidget(id, info) else cancelWidget()
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applySystemBars(this, Palette.isLight)
         runtime.start()
+        state.addAppWidget = ::addAppWidget
         setContent {
             LauncherRoot(runtime, state)
             LaunchedEffect(Palette.isLight) { applySystemBars(this@MainActivity, Palette.isLight) }
@@ -42,6 +58,66 @@ class MainActivity : ComponentActivity() {
             snapshotFlow { runtime.launcherReady }.first { it }
             withResumed { requestHomeRole() }
         }
+    }
+
+    /** Binds a new widget of [info]'s kind for [page]: at once if the user allowed it before, else Android asks. */
+    private fun addAppWidget(
+        info: AppWidgetProviderInfo,
+        page: Int,
+    ) {
+        val widgets = runtime.widgets.appWidgets
+        val id = widgets.allocate()
+        pendingWidget = Triple(id, info, page)
+        val bound = runCatching { widgets.manager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null) }.getOrDefault(false)
+        if (bound) {
+            configureWidget(id, info)
+        } else {
+            bindWidget.launch(
+                Intent(AppWidgetManager.ACTION_APPWIDGET_BIND)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, info.profile),
+            )
+        }
+    }
+
+    /** Opens the widget's own setup screen if it has one it needs; then it goes on the page. */
+    private fun configureWidget(
+        id: Int,
+        info: AppWidgetProviderInfo,
+    ) {
+        val optional = Build.VERSION.SDK_INT >= 28 && info.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL != 0
+        if (info.configure != null && !optional) {
+            try {
+                runtime.widgets.appWidgets.host.startAppWidgetConfigureActivityForResult(this, id, 0, REQUEST_CONFIGURE_WIDGET, null)
+                return
+            } catch (e: RuntimeException) {
+                Log.w("app-widgets", "can't open ${info.provider}'s setup", e)
+            }
+        }
+        placeWidget()
+    }
+
+    private fun placeWidget() {
+        val (id, info, page) = pendingWidget ?: return
+        pendingWidget = null
+        runtime.widgets.appWidgets.add(id, info, page, resources.displayMetrics)
+    }
+
+    private fun cancelWidget() {
+        pendingWidget?.let { runtime.widgets.appWidgets.release(it.first) }
+        pendingWidget = null
+    }
+
+    @Deprecated("The widget host starts configure screens for a result code, not through the result API.")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CONFIGURE_WIDGET) if (resultCode == RESULT_OK) placeWidget() else cancelWidget()
     }
 
     /** Asks once to become the default home app; Android shows its own chooser. */
@@ -113,12 +189,14 @@ class MainActivity : ComponentActivity() {
     /** Widgets only refresh while the home screen is visible. */
     override fun onStart() {
         super.onStart()
+        runtime.widgets.appWidgets.startListening()
         runtime.widgets.homeStarted()
         runtime.screenStarted()
     }
 
     override fun onStop() {
         super.onStop()
+        runtime.widgets.appWidgets.stopListening()
         state.closeNow()
         // An app was just opened from home: it moves to the front of the strip now, out of sight.
         runtime.usage.settle()
@@ -135,5 +213,10 @@ class MainActivity : ComponentActivity() {
             else -> return false
         }
         return true
+    }
+
+    private companion object {
+        /** startAppWidgetConfigureActivityForResult's request: a widget's setup screen. */
+        const val REQUEST_CONFIGURE_WIDGET = 0x0C0B
     }
 }

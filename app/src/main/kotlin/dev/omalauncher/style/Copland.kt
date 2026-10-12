@@ -1,7 +1,7 @@
 package dev.omalauncher.style
 
 /**
- * The launcher's look: Copland OS Enterprise, the OS on Lain's Navi in Serial Experiments Lain.
+ * The copland theme: Copland OS Enterprise, the OS on Lain's Navi in Serial Experiments Lain.
  * Deep navy panels, teal window frames and pale cyan text, with fauux's pink and beige for alerts.
  *
  * The names are the ones widgets use (`accent`, `foreground`, `muted`, ...) and style.toml
@@ -46,6 +46,6 @@ object Copland {
             "bright_magenta" to "#b3a6f0",
         )
 
-    /** The launcher's text: Navi's panels are monospace. */
+    /** The launcher's text by default, in every theme: Navi's panels are monospace. */
     const val FONT = "mono"
 }

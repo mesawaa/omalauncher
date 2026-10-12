@@ -29,7 +29,12 @@ import dev.omalauncher.Runtime
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.linux.TerminalFont
 import dev.omalauncher.linux.TerminalText
+import dev.omalauncher.IconPack
 import dev.omalauncher.style.StyleStore
+import dev.omalauncher.style.Themes
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * settings › style: the launcher's colors and font (style.toml, which an agent can change for you),
@@ -54,6 +59,7 @@ fun StyleScreen(
             StyleOption("home apps", listOf("boxed", "icon only"), if (LauncherStyle.bareAppIcons) 1 else 0) { store.setBareAppIcons(it == 1) }
             StyleOption("recent apps", listOf("shown", "hidden"), if (LauncherStyle.recentApps) 0 else 1) { store.setRecentApps(it == 0) }
             StyleOption("corners", Corners.entries.map { it.label }, LauncherStyle.corners.ordinal) { store.setCorners(Corners.entries[it]) }
+            IconPackOption(runtime)
             if (installed) TerminalSection(runtime.terminalFont)
         }
     }
@@ -69,6 +75,8 @@ private fun StyleFileSection(
     Heading("colors & font") {
         if (linux) BracketAction("edit with agent", Palette.accent, onEdit)
     }
+    val themes = Themes.ALL.keys.toList()
+    StyleOption("theme", themes.map { Themes.LABELS[it] ?: it }, themes.indexOf(store.theme).coerceAtLeast(0)) { store.pickTheme(themes[it]) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val named =
             listOf(
@@ -94,13 +102,30 @@ private fun StyleFileSection(
     )
     BasicText(
         when {
-            !linux -> "Copland OS's colors. They're set in ~/.config/omalauncher/style.toml, which comes with Linux."
-            store.overrides.isEmpty() -> "Copland OS's colors · change them in ~/.config/omalauncher/style.toml"
-            else -> "from ~/.config/omalauncher/style.toml · saving it restyles everything at once"
+            !linux -> "The theme's colors. Any of them can be changed in ~/.config/omalauncher/style.toml, which comes with Linux."
+            store.overrides.keys.none { it != "theme" && it != "font" } -> "The theme's colors · change any in ~/.config/omalauncher/style.toml"
+            else -> "The theme, with ~/.config/omalauncher/style.toml's colors · saving it restyles everything at once"
         },
         Modifier.padding(top = 4.dp),
         style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
     )
+}
+
+/** Icon packs for Android apps, in the format Nova and Lawnchair read; "none" keeps the apps' own icons. */
+@Composable
+private fun IconPackOption(runtime: Runtime) {
+    val context = LocalContext.current
+    val packs by produceState(emptyList<Pair<String, String>>()) { value = withContext(Dispatchers.IO) { IconPack.installed(context) } }
+    val names = listOf("none") + packs.map { it.second }
+    val selected = packs.indexOfFirst { it.first == LauncherStyle.iconPack } + 1
+    ChipOption("icon pack", names, selected) { i -> runtime.setIconPack(if (i == 0) null else packs[i - 1].first) }
+    if (packs.isEmpty()) {
+        BasicText(
+            "none installed · any pack made for Nova or Lawnchair works",
+            Modifier.padding(start = 104.dp, bottom = 4.dp),
+            style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
+        )
+    }
 }
 
 /** The terminals' font and the size they open at, on top of Android's font size; see [TerminalFont]. */
@@ -108,7 +133,7 @@ private fun StyleFileSection(
 private fun TerminalSection(font: TerminalFont) {
     LaunchedEffect(Unit) { font.refreshFamilies() }
     Heading("terminal")
-    FontOption(font.families, font.family, font::select)
+    ChipOption("font", font.families, font.families.indexOf(font.family)) { font.select(font.families[it]) }
     BasicText(
         "terminals opened from now on · more with pacman, like ttf-cascadia-code",
         Modifier.padding(start = 104.dp, bottom = 4.dp),
@@ -137,23 +162,24 @@ private fun Heading(
     }
 }
 
-/** Font names run long: each is a chip of its own, and they wrap rather than scroll out of sight. */
+/** Names that run long (fonts, icon packs): each is a chip of its own, and they wrap rather than scroll out of sight. */
 @Composable
-private fun FontOption(
-    families: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
+private fun ChipOption(
+    label: String,
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        BasicText("font", Modifier.widthIn(min = 104.dp).padding(top = 8.dp, end = 8.dp), style = Mono.copy(color = Palette.muted), softWrap = false)
+        BasicText(label, Modifier.widthIn(min = 104.dp).padding(top = 8.dp, end = 8.dp), style = Mono.copy(color = Palette.muted), softWrap = false)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (family in families) {
-                val active = family == selected
+            options.forEachIndexed { i, option ->
+                val active = i == selected
                 BasicText(
-                    family,
+                    option,
                     Modifier
                         .frame(1.dp, Palette.border, if (active) Palette.accent else Color.Transparent, radius = 12.dp)
-                        .clickable { onSelect(family) }
+                        .clickable { onSelect(i) }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     style = Mono.copy(color = if (active) Palette.background else Palette.foreground),
                     softWrap = false,

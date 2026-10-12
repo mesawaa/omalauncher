@@ -189,6 +189,12 @@ class Runtime(
         }
     }
 
+    /** Uses [pkg]'s icon pack for Android apps (null: their own icons), and keeps it. */
+    fun setIconPack(pkg: String?) {
+        style.setIconPack(pkg)
+        androidApps.setIconPack(pkg)
+    }
+
     /** The first-run screen is done; the home screen shows from now on. */
     fun finishWelcome() {
         prefs.edit().putBoolean(SETUP_DONE, true).apply()

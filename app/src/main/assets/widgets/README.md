@@ -511,22 +511,36 @@ links.
 
 ## Colors and fonts
 
-The launcher looks like Copland OS Enterprise, the OS on Lain's Navi: deep navy, teal window frames, pale
-cyan text. Its colors are the names widgets use: `background` #050517, `surface` #070b26 (panels),
-`selection` #0d1f50 (a window's title bar), `border` #246a96 (window frames), `foreground` #a8e4ea,
-`muted` #5a7fae (secondary text), `accent` #3fb8e0, `bright_foreground` #e0fbff, `red` #d2738a and
-`yellow` #c1b492 (fauux's pink and beige), and `green`, `cyan`, `blue`, `magenta`, `orange`,
-`color0`…`color15`.
+The launcher has two themes, and its colors are the names widgets use:
 
-`~/.config/omalauncher/style.toml` changes any of them, and the launcher's own font:
+| name | amoled (the default) | copland |
+|---|---|---|
+| `background` | #000000 | #050517 |
+| `surface` (panels) | #111111 | #070b26 |
+| `selection` (a window's title bar, icon badges) | #1c1c1c | #0d1f50 |
+| `border` (window frames) | #333333 | #246a96 |
+| `foreground` | #ffffff | #a8e4ea |
+| `muted` (secondary text) | #8a8a8a | #5a7fae |
+| `accent` | #ffffff | #3fb8e0 |
+| `bright_foreground` | #ffffff | #e0fbff |
+| `red` (alerts) | #d71921 (Nothing's red) | #d2738a (fauux's pink) |
+| `yellow` | #cecece | #c1b492 (fauux's beige) |
+
+amoled is pure black and white with grey frames; its `green`, `cyan`, `blue`, `magenta` and `orange` are greys
+too. copland is Copland OS Enterprise, the OS on Lain's Navi: deep navy, teal frames, pale cyan text. Both also
+have `color0`…`color15`.
+
+`~/.config/omalauncher/style.toml` picks the theme, changes any of its colors, and sets the launcher's own font:
 
 ```toml
+theme = "copland"
 font = "mono"
 accent = "#3fb8e0"
 ```
 
 Saving it restyles the launcher, every widget that uses those names and the terminals at once. Delete a
-line to get Copland's value back. A widget's hex colors stay as written.
+color's line to get the theme's own back. A widget's hex colors stay as written, so a widget that hardcodes
+one theme's colors looks the same under the other: use the names to follow the theme.
 
 `font:` (on Text, Button, Input, and Canvas `text()`) takes
 - `mono`, `sans`, `serif`, `cursive`, `system`, or `icon`: the bundled Nerd glyphs, the weather icons

@@ -247,7 +247,7 @@ private fun StripCell(
             glyph != null -> Image(glyph, label, Modifier.size(size * 0.7f), colorFilter = ColorFilter.tint(Palette.accent))
             // Bare silhouettes and initials sit on a badge, as pinned apps do, so they read on any wallpaper.
             bare && (mono || bmp == null) ->
-                Box(Modifier.size(size).clip(LauncherStyle.shape(size / 2)).background(Palette.surface), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(size).clip(CircleShape).background(Palette.bar), contentAlignment = Alignment.Center) {
                     if (bmp != null) {
                         Image(bmp, spoken, Modifier.size(size * 0.75f), colorFilter = ColorFilter.tint(Palette.accent))
                     } else {
@@ -519,23 +519,23 @@ private fun AppCell(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val mono = LauncherStyle.monochromeIcons
-        // Badges are circles when rounded, squares with Omarchy's sharp edges.
-        val badge = LauncherStyle.shape(26.dp)
+        // Badges are circles, as on stock Android.
+        val badge = CircleShape
         if (glyph != null) {
             Box(
-                Modifier.size(52.dp).clip(badge).background(if (mono) Palette.surface else Palette.accent),
+                Modifier.size(52.dp).clip(badge).background(if (mono) Palette.bar else Palette.accent),
                 contentAlignment = Alignment.Center,
             ) {
                 Image(glyph, label, Modifier.size(26.dp), colorFilter = ColorFilter.tint(if (mono) Palette.accent else Palette.background))
             }
         } else if (mono && mask != null) {
-            Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(52.dp).clip(badge).background(Palette.bar), contentAlignment = Alignment.Center) {
                 Image(mask, spoken, Modifier.size(36.dp), colorFilter = ColorFilter.tint(Palette.accent))
             }
         } else if (!mono && icon != null) {
             Image(icon, spoken, Modifier.size(52.dp))
         } else {
-            Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(52.dp).clip(badge).background(Palette.bar), contentAlignment = Alignment.Center) {
                 BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Title))
             }
         }

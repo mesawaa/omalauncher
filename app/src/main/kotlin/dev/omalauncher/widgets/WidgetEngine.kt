@@ -89,6 +89,9 @@ class WidgetEngine(
     private val instances = HashMap<String, WidgetInstance>()
     val layout = WidgetLayout(context)
     val shortcuts = Shortcuts(context, layout)
+
+    /** Stock Android widgets on the home grid. */
+    val appWidgets = AppWidgets(context, layout)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val services = WidgetServices(context, proot, runtime, scope)
 
@@ -193,6 +196,7 @@ class WidgetEngine(
                 if (i >= 0) specs[i] = specs[i].onPage(page)
             }
             is Shortcut, is Folder -> shortcuts.move(item.key, page)
+            is AppWidgetItem -> appWidgets.move(item.key, page)
         }
     }
 
@@ -285,10 +289,11 @@ class WidgetEngine(
     }
 
     /** Widgets, pinned apps and folders on [page]. Wrappers compare by spec, so unchanged pages skip recomposition. */
-    fun itemsOn(page: Int): List<HomeItem> = specs.filter { it.page == page }.map(::WidgetItem) + shortcuts.onGrid().filter { it.page == page }
+    fun itemsOn(page: Int): List<HomeItem> =
+        specs.filter { it.page == page }.map(::WidgetItem) + shortcuts.onGrid().filter { it.page == page } + appWidgets.items.filter { it.page == page }
 
     private val pageList by derivedStateOf {
-        (specs.map { it.page } + shortcuts.onGrid().map { it.page }).distinct().sorted().ifEmpty { listOf(1) }
+        (specs.map { it.page } + shortcuts.onGrid().map { it.page } + appWidgets.items.map { it.page }).distinct().sorted().ifEmpty { listOf(1) }
     }
 
     val pages: List<Int> get() = pageList

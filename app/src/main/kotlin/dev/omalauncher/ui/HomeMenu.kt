@@ -75,6 +75,10 @@ fun HomeMenu(
                 else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
             }
         }
+        MenuItem("android widget") {
+            state.homeMenuOpen = false
+            state.appWidgetsOpen = true
+        }
         MenuItem("widget store") {
             state.homeMenuOpen = false
             state.storeOpen = true

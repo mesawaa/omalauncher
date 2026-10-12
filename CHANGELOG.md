@@ -4,6 +4,15 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
+## Copland OS 1.1 (versionCode 1002) – 2026-10-12
+
+- Black and white by default (amoled); Copland OS is a theme to pick in settings › style, or with
+  `theme = "copland"` in style.toml.
+- App icons are white glyphs on round badges by default, like Nothing's themed icons.
+- Icon packs made for Nova and Lawnchair (settings › style › icon pack).
+- Stock Android widgets on the home screen: long-press empty space › android widget.
+- The app icon is Copland OS's eye, in blue.
+
 ## Copland OS 1.0 (versionCode 1001) – 2026-10-11
 
 A fork of 0.5.0, installed as dev.omalauncher.nothing.

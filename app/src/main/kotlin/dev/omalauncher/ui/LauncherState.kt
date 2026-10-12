@@ -19,6 +19,12 @@ import kotlinx.coroutines.Dispatchers
 class LauncherState {
     val drawer = Animatable(0f)
     var styleOpen by mutableStateOf(false)
+
+    /** The picker of stock Android widgets, from the home menu. */
+    var appWidgetsOpen by mutableStateOf(false)
+
+    /** Binds, configures and places an Android widget on a page; the activity sets it, since binding asks through it. */
+    var addAppWidget: (android.appwidget.AppWidgetProviderInfo, Int) -> Unit = { _, _ -> }
     var agentsOpen by mutableStateOf(false)
     var storeOpen by mutableStateOf(false)
     var settingsOpen by mutableStateOf(false)
@@ -39,11 +45,12 @@ class LauncherState {
 
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
-        get() = drawer.value > 0.99f || settingsOpen || styleOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null || sharing != null
+        get() = drawer.value > 0.99f || settingsOpen || styleOpen || appWidgetsOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null || sharing != null
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
         styleOpen = false
+        appWidgetsOpen = false
         agentsOpen = false
         storeOpen = false
         packagesOpen = false

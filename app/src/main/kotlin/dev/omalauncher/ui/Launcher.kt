@@ -82,6 +82,7 @@ private fun DesktopScreen(
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
             state.styleOpen -> state.styleOpen = false
+            state.appWidgetsOpen -> state.appWidgetsOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.settingsOpen -> state.settingsOpen = false
             runtime.widgets.openScreen != null -> runtime.widgets.openScreen = null
@@ -221,6 +222,16 @@ private fun Overlays(
     }
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
     if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false })
+    if (state.appWidgetsOpen) {
+        AppWidgetPicker(
+            runtime.widgets.appWidgets,
+            onPick = { info ->
+                state.appWidgetsOpen = false
+                state.addAppWidget(info, state.currentPage)
+            },
+            onDismiss = { state.appWidgetsOpen = false },
+        )
+    }
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, null, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })

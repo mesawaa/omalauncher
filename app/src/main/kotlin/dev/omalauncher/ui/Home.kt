@@ -10,6 +10,7 @@ import androidx.compose.runtime.snapshotFlow
 import dev.omalauncher.widgets.Folder
 import dev.omalauncher.widgets.HomeItem
 import dev.omalauncher.widgets.Shortcut
+import dev.omalauncher.widgets.AppWidgetItem
 import dev.omalauncher.widgets.WidgetItem
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -144,6 +145,7 @@ fun HomeScreen(
         when (item) {
             is WidgetItem -> engine.removeWidget(item.spec)
             is Shortcut, is Folder -> engine.shortcuts.remove(item.key)
+            is AppWidgetItem -> engine.appWidgets.remove(item)
         }
         engine.layout.remove(item.key)
     }
@@ -308,6 +310,7 @@ fun HomeScreen(
                             },
                             paused = runtime.androidApps.paused(item.profile),
                         )
+                    is AppWidgetItem -> AppWidgetTile(item, engine.appWidgets, tile)
                     is Folder ->
                         FolderTile(
                             folder = item,

@@ -57,7 +57,7 @@ fun FolderTile(
         val badge = min(maxWidth, maxHeight) * if (bare) 0.95f else 0.85f
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Box(
-                Modifier.size(badge).clip(LauncherStyle.shape(badge / 3)).background(Palette.surface),
+                Modifier.size(badge).clip(LauncherStyle.shape(badge / 3)).background(Palette.bar),
                 contentAlignment = Alignment.Center,
             ) {
                 val mini = badge * 0.36f

@@ -103,6 +103,18 @@ class AndroidAppCatalog(
     /** Icon edge in px: the drawer's 52dp icon at this screen's density. */
     private val iconPx = (52 * context.resources.displayMetrics.density).toInt().coerceAtLeast(48)
 
+    /** The icon pack in use ([dev.omalauncher.ui.LauncherStyle.iconPack]), once read; null for the apps' own icons. */
+    private var pack: IconPack? = null
+
+    /** Reloads every icon from [pkg]'s pack (null: the apps' own). */
+    fun setIconPack(pkg: String?) {
+        if (pack?.packageName == pkg) return
+        pack = null
+        icons.clear()
+        masks.clear()
+        reload()
+    }
+
     fun start() {
         launcherApps.registerCallback(
             object : LauncherApps.Callback() {
@@ -229,6 +241,11 @@ class AndroidAppCatalog(
                 val present = list.mapTo(HashSet()) { it.key }
                 icons.keys.retainAll(present)
                 masks.keys.retainAll(present)
+                // The pack picked in settings › style, read once; one that can't be read leaves the apps' own icons.
+                val wanted = dev.omalauncher.ui.LauncherStyle.iconPack
+                if (pack?.packageName != wanted) pack = wanted?.let { pkg -> withContext(Dispatchers.IO) { IconPack(context, pkg).takeIf { it.load() } } }
+                val pack = pack
+                val dpi = context.resources.displayMetrics.densityDpi
                 for ((info, app) in infos) {
                     if (app.key in icons) continue
                     launch {
@@ -236,7 +253,11 @@ class AndroidAppCatalog(
                         val rendered =
                             withContext(iconDispatcher) {
                                 runCatching {
-                                    val d = info.getIcon(0)
+                                    val own = info.getIcon(0)
+                                    // The pack's icon for the app; failing that, the app's own on the pack's back, or as it is.
+                                    val packed = pack?.icon(app.component, dpi)
+                                    val dressed = if (pack != null && packed == null) pack.dress(app.component, own, iconPx, dpi) else null
+                                    val d = packed ?: dressed?.let { android.graphics.drawable.BitmapDrawable(context.resources, it) } ?: own
                                     val bmp = Bitmap.createBitmap(iconPx, iconPx, Bitmap.Config.ARGB_8888)
                                     d.setBounds(0, 0, iconPx, iconPx)
                                     d.draw(Canvas(bmp))

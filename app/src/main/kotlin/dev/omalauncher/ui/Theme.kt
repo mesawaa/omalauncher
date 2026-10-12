@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.omalauncher.R
 import dev.omalauncher.style.Colors
-import dev.omalauncher.style.Copland
+import dev.omalauncher.style.Themes
 
 /** `#rrggbb` or `#aarrggbb` as a color; null if it isn't one. */
 fun hexColor(hex: String?): Color? {
@@ -50,28 +50,28 @@ class ThemePalette(
     ) = named[key] ?: Color(fallback)
 
     val isLight = colors["mode"] == "light"
-    val background = color("background", 0xFF050517)
-    val surface = color("lighter_background", 0xFF070B26)
+    val background = color("background", 0xFF000000)
+    val surface = color("lighter_background", 0xFF111111)
     val overlay = background.copy(alpha = 0.9f)
-    val foreground = color("foreground", 0xFFA8E4EA)
-    val muted = color("dark_foreground", 0xFF5A7FAE)
-    val accent = color("accent", 0xFF3FB8E0)
-    val border = color("muted", 0xFF246A96)
+    val foreground = color("foreground", 0xFFFFFFFF)
+    val muted = color("dark_foreground", 0xFF8A8A8A)
+    val accent = color("accent", 0xFFFFFFFF)
+    val border = color("muted", 0xFF333333)
 
-    /** A Navi window's title bar. */
-    val bar = color("selection", 0xFF0D1F50)
-    val bright = color("bright_foreground", 0xFFE0FBFF)
-    val red = color("red", 0xFFD2738A)
-    val green = color("green", 0xFF5FD4B4)
+    /** A window's title bar, and the badge behind monochrome app icons. */
+    val bar = color("selection", 0xFF1C1C1C)
+    val bright = color("bright_foreground", 0xFFFFFFFF)
+    val red = color("red", 0xFFD71921)
+    val green = color("green", 0xFFB6B6B6)
     val mono = TextStyle(fontFamily = font, fontSize = TextSize.Body, color = foreground)
 }
 
 /**
- * Launcher colors: Copland OS ([Copland]), with whatever style.toml changes
+ * Launcher colors: the picked theme ([Themes]), with whatever style.toml changes
  * (see [dev.omalauncher.style.StyleStore]).
  */
 object Palette {
-    var current by mutableStateOf(ThemePalette(Colors.resolve(Copland.COLORS)))
+    var current by mutableStateOf(ThemePalette(Colors.resolve(Themes.colors(Themes.DEFAULT))))
         private set
 
     fun apply(
@@ -113,6 +113,9 @@ object LauncherStyle {
 
     /** How frames (tiles, panels, menus, fields) round their corners. */
     var corners by mutableStateOf(Corners.Edge)
+
+    /** An icon pack's package (see [dev.omalauncher.IconPack]); null for the apps' own icons. */
+    var iconPack by mutableStateOf<String?>(null)
 
     /** The shape frames use: square, or [radius] scaled by the corner style. */
     fun shape(radius: Dp = 16.dp): Shape = if (corners == Corners.Edge) RectangleShape else RoundedCornerShape(radius * corners.scale)

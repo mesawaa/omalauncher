@@ -25,10 +25,12 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * How the launcher looks: Copland OS ([Copland]) unless `~/.config/omalauncher/style.toml`
- * says otherwise. That file sets any of the colors widgets use by name (`accent = "#3fb8e0"`)
- * and the launcher's `font`; saving it restyles the launcher, widgets and new terminals at once.
- * Also keeps the home screen options (icons, corners, ...) and the guest's terminal and shell configs.
+ * How the launcher looks: a theme ([Themes]: black and white by default, or Copland OS), under
+ * whatever `~/.config/omalauncher/style.toml` says. That file picks the `theme`, sets any of the
+ * colors widgets use by name (`accent = "#3fb8e0"`) and the launcher's `font`; saving it restyles
+ * the launcher, widgets and terminals at once. Without Linux (so without the file) the theme picked
+ * in settings › style is kept in preferences. Also keeps the home screen options (icons, corners,
+ * the icon pack) and the guest's terminal and shell configs.
  */
 class StyleStore(
     private val context: Context,
@@ -46,20 +48,68 @@ class StyleStore(
     var overrides by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
+    /** The theme in use: style.toml's `theme`, else the one picked in settings › style. */
+    var theme by mutableStateOf(Themes.known(prefs.getString(THEME, null)))
+        private set
+
+    /** What style.toml said when it was last read, to apply again under another theme. */
+    private var raw: Map<String, String> = emptyMap()
+
+    private var scope: CoroutineScope? = null
+
     /** The font style.toml asks for, if it found nothing by that name; shown in settings › style. */
     var missingFont by mutableStateOf<String?>(null)
         private set
 
     /** Every color by name, as now in use. */
-    @Volatile private var colors: Map<String, String> = Colors.resolve(Copland.COLORS)
+    @Volatile private var colors: Map<String, String> = Colors.resolve(Themes.colors(Themes.DEFAULT))
 
     /** The home screen options; before the first frame, so it doesn't jump. */
     fun loadOptions() {
-        LauncherStyle.monochromeIcons = prefs.getBoolean(MONO_ICONS, false)
+        // White glyphs on round badges, like Nothing's themed icons, unless colored icons were picked.
+        LauncherStyle.monochromeIcons = prefs.getBoolean(MONO_ICONS, true)
         // Bare icons on the wallpaper, like stock launchers, unless boxes were picked.
         LauncherStyle.bareAppIcons = prefs.getBoolean(BARE_APP_ICONS, true)
         LauncherStyle.recentApps = prefs.getBoolean(RECENT_APPS, true)
         LauncherStyle.corners = Corners.of(prefs.getString(CORNERS, null))
+        LauncherStyle.iconPack = prefs.getString(ICON_PACK, null)
+    }
+
+    /** Uses [pkg]'s icons for apps, or the apps' own with null; the app catalog reloads them. */
+    fun setIconPack(pkg: String?) {
+        LauncherStyle.iconPack = pkg
+        prefs.edit().putString(ICON_PACK, pkg).apply()
+    }
+
+    /**
+     * Picks theme [name]. With style.toml, its `theme` line changes (and the watcher restyles from it);
+     * the rest of the file, the user's own colors included, stays as it is.
+     */
+    fun pickTheme(name: String) {
+        val picked = Themes.known(name)
+        prefs.edit().putString(THEME, picked).apply()
+        scope?.launch {
+            val written =
+                withContext(Dispatchers.IO) {
+                    val f = file
+                    if (!f.isFile) return@withContext false
+                    runCatching {
+                        val lines = f.readLines().toMutableList()
+                        val line = "theme = \"$picked\""
+                        val at = lines.indexOfFirst { THEME_LINE.containsMatchIn(it) }
+                        if (at >= 0) {
+                            lines[at] = line
+                        } else {
+                            // After the comments at the top, where a seeded file has it.
+                            lines.add(lines.indexOfFirst { it.isNotBlank() && !it.trimStart().startsWith("#") }.takeIf { it >= 0 } ?: lines.size, line)
+                        }
+                        val tmp = File(f.parentFile, ".${f.name}.tmp")
+                        tmp.writeText(lines.joinToString("\n", postfix = "\n"))
+                        tmp.renameTo(f)
+                    }.getOrDefault(false)
+                }
+            if (!written) apply(raw)
+        }
     }
 
     fun setMonochromeIcons(on: Boolean) {
@@ -84,11 +134,14 @@ class StyleStore(
 
     /** Follows style.toml from now on, including when it's created or deleted. Call once. */
     fun start(scope: CoroutineScope) {
+        this.scope = scope
         scope.launch { watchFile(file).collect { apply(Colors.parse(it)) } }
     }
 
     private suspend fun apply(raw: Map<String, String>) {
-        val resolved = Colors.resolve(Copland.COLORS + raw.filterKeys { it !in NOT_COLORS })
+        this.raw = raw
+        theme = Themes.known(raw["theme"] ?: prefs.getString(THEME, null))
+        val resolved = Colors.resolve(Themes.colors(theme) + raw.filterKeys { it !in NOT_COLORS })
         val spec = raw["font"]?.takeIf { it.isNotBlank() } ?: Copland.FONT
         val font = withContext(Dispatchers.IO) { Fonts.load(spec, ::guestFile) }
         missingFont = spec.takeIf { font == null }
@@ -162,7 +215,7 @@ class StyleStore(
     fun managed(): List<Managed> {
         val home = proot.home
         val dark = colors["mode"] != "light"
-        val accent = colors["accent"] ?: Copland.COLORS.getValue("accent")
+        val accent = colors["accent"] ?: "#ffffff"
         val files =
             mutableListOf(
                 Managed.text(File(home, ".config/foot/foot.ini"), Policy.Seeded) { FOOT_INI },
@@ -226,12 +279,16 @@ class StyleStore(
         private const val COLORS_PATH = "~/.local/state/omalauncher/foot-colors.ini"
 
         /** style.toml keys that aren't colors. */
-        private val NOT_COLORS = setOf("font")
+        private val NOT_COLORS = setOf("font", "theme")
+
+        private val THEME_LINE = Regex("""^\s*theme\s*=""")
 
         private const val MONO_ICONS = "mono_icons"
         private const val BARE_APP_ICONS = "bare_app_icons"
         private const val RECENT_APPS = "recent_apps"
         private const val CORNERS = "corners"
+        private const val THEME = "theme_name"
+        private const val ICON_PACK = "icon_pack"
         private const val OMARCHY_REMOVED = "omarchy_removed"
         private const val TAG = "style"
 
@@ -249,23 +306,26 @@ class StyleStore(
         /** An agent session about style.toml: it reads the file and the widget docs, then asks what to change. */
         fun editCommand(agentBin: String): String {
             val prompt =
-                "~/.config/omalauncher/$FILE_NAME sets how my home-screen launcher looks: its colors by name (the same names my " +
-                    "widgets use, like accent, foreground, muted and border) and its font. Saving it restyles the launcher, the " +
+                "~/.config/omalauncher/$FILE_NAME sets how my home-screen launcher looks: its theme (amoled or copland), its " +
+                    "colors by name (the same names my widgets use, like accent, foreground, muted and border) and its font. " +
+                    "Saving it restyles the launcher, the " +
                     "widgets that use those names and new terminals at once. Read it, and the Colors and Fonts parts of " +
                     "~/.config/omalauncher/widgets/README.md, then ask me what to change."
             return "cd ~/.config/omalauncher && ${agentInvocation(agentBin, prompt)}; exec bash"
         }
 
-        /** Where to start: every color Copland OS sets, and the font, each ready to change. */
+        /** Where to start: the theme and the font, and every color as a comment, ready to change. */
         val STYLE_TOML =
             buildString {
                 append("# How the launcher looks. Save this file and the launcher, widgets that use these color\n")
-                append("# names and new terminals follow at once. Delete a line to get the built-in value back.\n")
-                append("# Copland OS Enterprise, the OS on Lain's Navi.\n\n")
+                append("# names and the terminals follow at once.\n\n")
+                append("# amoled: black and white. copland: Copland OS Enterprise, the OS on Lain's Navi.\n")
+                append("theme = \"${Themes.DEFAULT}\"\n\n")
                 append("# The launcher's font: mono, sans, serif, an Android font (sans-serif-condensed),\n")
                 append("# a font file's name in ~/.local/share/fonts or /usr/share/fonts, or its path.\n")
                 append("font = \"${Copland.FONT}\"\n\n")
-                for ((key, value) in Copland.COLORS) append("$key = \"$value\"\n")
+                append("# Any color the theme sets can be changed here; these are amoled's. Remove the # to use one.\n")
+                for ((key, value) in Themes.colors(Themes.DEFAULT)) if (key != "mode") append("# $key = \"$value\"\n")
             }
 
         /**
