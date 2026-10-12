@@ -36,11 +36,16 @@ object Fonts {
             else -> systemFamily(name.trim())
         }
 
+    /** Android's families by name, or none, as looked up once: text asks again on every recomposition. */
+    private val system = ConcurrentHashMap<String, Pair<FontFamily?, Unit>>()
+
     /** Android's own families (fonts.xml): an unknown name gives back the default typeface itself. */
     private fun systemFamily(name: String): FontFamily? {
         if (name.contains('/') || name.contains('.')) return null
-        val typeface = runCatching { Typeface.create(name, Typeface.NORMAL) }.getOrNull() ?: return null
-        return if (typeface === Typeface.DEFAULT) null else FontFamily(typeface)
+        return system.getOrPut(name) {
+            val typeface = runCatching { Typeface.create(name, Typeface.NORMAL) }.getOrNull()
+            (if (typeface == null || typeface === Typeface.DEFAULT) null else FontFamily(typeface)) to Unit
+        }.first
     }
 
     /** Loaded families by spec; a miss is kept for [MISS_MS], so a font installed meanwhile shows up. */

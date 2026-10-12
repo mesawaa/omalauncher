@@ -4,6 +4,21 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
+## Copland OS 1.0 (versionCode 1001) – 2026-10-11
+
+A fork of 0.5.0, installed as dev.omalauncher.nothing.
+
+- The launcher looks like Copland OS Enterprise, Lain's Navi: Navi windows, deep navy, teal frames, pale
+  cyan text. ~/.config/omalauncher/style.toml changes its colors and font; saving it restyles the
+  launcher, widgets and terminals at once.
+- Omarchy's themes are gone: no theme picker, catalog, download or live wallpaper. Home shows your
+  Android wallpaper.
+- The launcher draws no frame around widget tiles; widgets draw their own and read `focused`.
+- Widgets can use any font (Android's, or a file in Linux), weights, spacing, shadows and glows, gradients,
+  blur and per-corner radii; screens can go edge to edge with `chrome: false`.
+- No `meta { owl }` needed, and limits are 10 to 50 times higher.
+- url() opens deep links into an app and intent: URIs.
+
 ## Unreleased
 
 - Apps from a work profile show up next to your own, marked with a briefcase,
