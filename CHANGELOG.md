@@ -23,7 +23,6 @@ A fork of 0.5.0, installed as dev.omalauncher.nothing.
 
 - Apps from a work profile show up next to your own, marked with a briefcase,
   and dimmed while work apps are paused.
-- Hide the borders around home's tiles and full-screen panels (Style › borders).
 
 ## 0.5.0 (versionCode 10) – 2026-10-11
 
