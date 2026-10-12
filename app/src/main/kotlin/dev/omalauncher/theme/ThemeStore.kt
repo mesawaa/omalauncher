@@ -149,6 +149,7 @@ class ThemeStore(
         LauncherStyle.bareAppIcons = prefs.getBoolean(BARE_APP_ICONS, false)
         LauncherStyle.recentApps = prefs.getBoolean(RECENT_APPS, true)
         LauncherStyle.corners = Corners.of(prefs.getString(CORNERS, null))
+        LauncherStyle.borders = prefs.getBoolean(BORDERS, true)
     }
 
     fun setMonochromeIcons(on: Boolean) {
@@ -169,6 +170,11 @@ class ThemeStore(
     fun setCorners(corners: Corners) {
         LauncherStyle.corners = corners
         prefs.edit().putString(CORNERS, corners.id).apply()
+    }
+
+    fun setBorders(on: Boolean) {
+        LauncherStyle.borders = on
+        prefs.edit().putBoolean(BORDERS, on).apply()
     }
 
     /** Whether our live wallpaper is the Android wallpaper; the launcher then shows it instead of drawing its own. */
@@ -495,6 +501,7 @@ class ThemeStore(
         private const val BARE_APP_ICONS = "bare_app_icons"
         private const val RECENT_APPS = "recent_apps"
         private const val CORNERS = "corners"
+        private const val BORDERS = "borders"
         private const val RENDERED_BY = "rendered_by"
         private const val DEFAULT_THEME = "tokyo-night"
 

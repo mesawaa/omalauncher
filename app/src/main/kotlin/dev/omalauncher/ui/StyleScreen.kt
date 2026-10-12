@@ -95,6 +95,7 @@ fun StyleScreen(
             StyleOption("home apps", listOf("boxed", "icon only"), if (LauncherStyle.bareAppIcons) 1 else 0) { store.setBareAppIcons(it == 1) }
             StyleOption("recent apps", listOf("shown", "hidden"), if (LauncherStyle.recentApps) 0 else 1) { store.setRecentApps(it == 0) }
             StyleOption("corners", Corners.entries.map { it.label }, LauncherStyle.corners.ordinal) { store.setCorners(Corners.entries[it]) }
+            StyleOption("borders", listOf("shown", "hidden"), if (LauncherStyle.borders) 0 else 1) { store.setBorders(it == 0) }
             if (linux == LinuxState.Installed) TerminalSection(runtime.terminalFont)
         }
         if (installOpen) {

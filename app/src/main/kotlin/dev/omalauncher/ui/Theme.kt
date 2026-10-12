@@ -106,6 +106,9 @@ object LauncherStyle {
     /** How frames (tiles, panels, menus, fields) round their corners. */
     var corners by mutableStateOf(Corners.Edge)
 
+    /** Outlines around home's tiles and full-screen panels, like Omarchy's window borders; off leaves just their fill. */
+    var borders by mutableStateOf(true)
+
     /** The shape frames use: square, or [radius] scaled by the corner style. */
     fun shape(radius: Dp = 16.dp): Shape = if (corners == Corners.Edge) RectangleShape else RoundedCornerShape(radius * corners.scale)
 }
@@ -128,7 +131,10 @@ enum class Corners(
     }
 }
 
-/** A framed surface in the user's corner style: clipped, filled, then outlined with one shape. */
+/**
+ * A framed surface in the user's corner style: clipped, filled, then outlined with one shape.
+ * A [width] of 0 leaves out the outline (Compose's border would draw a hairline).
+ */
 fun Modifier.frame(
     width: Dp,
     color: Color,
@@ -136,8 +142,12 @@ fun Modifier.frame(
     radius: Dp = 16.dp,
 ): Modifier {
     val shape = LauncherStyle.shape(radius)
-    return clip(shape).background(fill, shape).border(width, color, shape)
+    val filled = clip(shape).background(fill, shape)
+    return if (width > 0.dp) filled.border(width, color, shape) else filled
 }
+
+/** A frame's outline width: [width], or none when the user hid borders. */
+fun frameWidth(width: Dp = 2.dp): Dp = if (LauncherStyle.borders) width else 0.dp
 
 /**
  * Omarchy's gap between framed surfaces: between home's tiles, from them to the screen's
@@ -148,8 +158,12 @@ val HomeGap = 6.dp
 /** The widest a column of text and rows gets on a big screen: the bar beside landscape home, text-heavy panels. */
 val ReadingWidth = 640.dp
 
-/** A home-screen surface over the wallpaper: tiles, the prompt bar, the rails; accent while [focused]. */
-fun Modifier.tile(focused: Boolean = false): Modifier = frame(2.dp, if (focused) Palette.accent else Palette.border, Palette.glass)
+/**
+ * A home-screen surface over the wallpaper: tiles, the prompt bar, the rails; accent while [focused].
+ * With borders hidden only the focused one is outlined, so it's still clear which has the keyboard.
+ */
+fun Modifier.tile(focused: Boolean = false): Modifier =
+    if (focused) frame(2.dp, Palette.accent, Palette.glass) else frame(frameWidth(), Palette.border, Palette.glass)
 
 /** The launcher's text style in the theme's foreground color. */
 val Mono get() = Palette.current.mono

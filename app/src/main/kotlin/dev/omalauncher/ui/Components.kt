@@ -52,7 +52,7 @@ fun OverlayPanel(
         Column(
             Modifier
                 .fillMaxSize()
-                .frame(2.dp, Palette.accent, Palette.background, radius = 20.dp)
+                .frame(frameWidth(), Palette.accent, Palette.background, radius = 20.dp)
                 // Taps inside the panel don't reach the scrim behind it.
                 .pointerInput(Unit) { detectTapGestures { } }
                 .padding(PanelPadding),
